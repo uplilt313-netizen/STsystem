@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系統功能測試</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 { color: #2563eb; }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section h2 {
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 10px;
+        }
+        .result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th { background: #f0f0f0; }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #1d4ed8; }
+        .schedule-grid {
+            display: grid;
+            grid-template-columns: 80px repeat(5, 1fr);
+            gap: 2px;
+            background: #ddd;
+            margin: 10px 0;
+        }
+        .schedule-cell {
+            background: white;
+            padding: 8px;
+            text-align: center;
+            font-size: 12px;
+        }
+        .schedule-header { background: #2563eb; color: white; font-weight: bold; }
+        .schedule-free { background: #d4edda; }
+        .schedule-busy { background: #fff3cd; }
+    </style>
+</head>
+<body>
+    <h1>國中調代課自動化系統 - 功能測試</h1>
+
+    <div class="test-section">
+        <h2>測試一：課表解析功能</h2>
+        <button onclick="testScheduleParser()">執行測試</button>
+        <div id="parser-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>測試二：智慧推薦演算法</h2>
+        <button onclick="testRecommendation()">執行測試</button>
+        <div id="recommendation-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>測試三：PDF 生成功能</h2>
+        <button onclick="testPDFGeneration()">生成測試 PDF</button>
+        <div id="pdf-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>測試四：月結算功能</h2>
+        <button onclick="testSettlement()">執行測試</button>
+        <div id="settlement-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>測試五：完整流程模擬</h2>
+        <button onclick="runFullTest()">執行完整測試</button>
+        <div id="full-test-result"></div>
+    </div>
+
+    <script type="module">
+        // 匯入模組
+        import { DataManager } from '../src/js/modules/dataManager.js';
+        import { ScheduleParser } from '../src/js/modules/scheduleParser.js';
+        import { RecommendationEngine } from '../src/js/modules/recommendationEngine.js';
+        import { PDFGenerator } from '../src/js/modules/pdfGenerator.js';
+        import { SettlementCalculator } from '../src/js/modules/settlementCalculator.js';
+
+        // 將模組掛載到全域
+        window.DataManager = DataManager;
+        window.ScheduleParser = ScheduleParser;
+        window.RecommendationEngine = RecommendationEngine;
+        window.PDFGenerator = PDFGenerator;
+        window.SettlementCalculator = SettlementCalculator;
+
+        // 虛構測試資料
+        window.testData = {
+            // 教師資料（含導師班級）
+            teachers: [
+                { name: '王大明', domains: ['數學領域'], homeroomClass: '7年1班' },
+                { name: '李小華', domains: ['語文領域'], homeroomClass: '7年2班' },
+                { name: '張美玲', domains: ['語文領域'], homeroomClass: '' },
+                { name: '陳志明', domains: ['自然科學領域'], homeroomClass: '' },
+                { name: '林淑芬', domains: ['社會領域'], homeroomClass: '' },
+                { name: '黃建國', domains: ['健康與體育領域'], homeroomClass: '' },
+                { name: '吳雅婷', domains: ['藝術領域'], homeroomClass: '' },
+                { name: '周文傑', domains: ['科技領域'], homeroomClass: '' },
+                { name: '劉家豪', domains: ['綜合活動領域'], homeroomClass: '' },
+                { name: '趙心怡', domains: ['數學領域'], homeroomClass: '' }
+            ],
+
+            // 調課紀錄（模擬 3 月份）- 含新欄位：type, leaveType, leaveTypeName, docNumber
+            substituteRecords: [
+                {
+                    id: '1',
+                    type: 'substitute',
+                    date: '2026-03-05',
+                    weekday: '週四',
+                    period: '第一節',
+                    className: '7年1班',
+                    subject: '數學',
+                    domain: '數學領域',
+                    originalTeacher: '王大明',
+                    substituteTeacher: '趙心怡',
+                    leaveType: 'official',
+                    leaveTypeName: '公假',
+                    docNumber: '北教字第1140012345號',
+                    reason: '參加教育局研習',
+                    createdAt: '2026-03-04T10:00:00Z'
+                },
+                {
+                    id: '2',
+                    type: 'substitute',
+                    date: '2026-03-10',
+                    weekday: '週二',
+                    period: '第二節',
+                    className: '7年1班',
+                    subject: '國語文',
+                    domain: '語文領域',
+                    originalTeacher: '李小華',
+                    substituteTeacher: '張美玲',
+                    leaveType: 'sick',
+                    leaveTypeName: '病假',
+                    docNumber: '',
+                    reason: '身體不適',
+                    createdAt: '2026-03-09T14:00:00Z'
+                },
+                {
+                    id: '3',
+                    type: 'substitute',
+                    date: '2026-03-12',
+                    weekday: '週四',
+                    period: '第四節',
+                    className: '7年2班',
+                    subject: '生活科技',
+                    domain: '科技領域',
+                    originalTeacher: '周文傑',
+                    substituteTeacher: '王大明',
+                    leaveType: 'official',
+                    leaveTypeName: '公假',
+                    docNumber: '北教字第1140054321號',
+                    reason: '公差外出',
+                    createdAt: '2026-03-11T09:00:00Z'
+                },
+                {
+                    id: '4',
+                    type: 'swap',
+                    date: '2026-03-15',
+                    weekday: '週一',
+                    period: '第三節',
+                    className: '7年1班',
+                    subject: '數學',
+                    domain: '數學領域',
+                    originalTeacher: '王大明',
+                    substituteTeacher: '趙心怡',
+                    leaveType: 'swap',
+                    leaveTypeName: '調課',
+                    docNumber: '',
+                    reason: '調課互換',
+                    createdAt: '2026-03-14T08:00:00Z'
+                },
+                {
+                    id: '5',
+                    type: 'substitute',
+                    date: '2026-03-18',
+                    weekday: '週四',
+                    period: '第二節',
+                    className: '7年2班',
+                    subject: '國語文',
+                    domain: '語文領域',
+                    originalTeacher: '李小華',
+                    substituteTeacher: '張美玲',
+                    leaveType: 'personal',
+                    leaveTypeName: '事假',
+                    docNumber: '',
+                    reason: '家中有事',
+                    createdAt: '2026-03-17T10:00:00Z'
+                }
+            ]
+        };
+
+        console.log('測試模組已載入');
+    </script>
+
+    <script>
+        // ===== 測試一：課表解析 =====
+        async function testScheduleParser() {
+            const resultDiv = document.getElementById('parser-result');
+            resultDiv.innerHTML = '<div class="info">正在載入測試資料...</div>';
+
+            try {
+                // 載入 CSV 測試資料
+                const response = await fetch('test-data.csv');
+                const csvText = await response.text();
+
+                // 使用 PapaParse 解析
+                const parseResult = Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true
+                });
+
+                const rawData = parseResult.data;
+
+                // 處理資料
+                const scheduleData = [];
+                const teacherSet = new Map();
+                const classSet = new Set();
+
+                rawData.forEach(row => {
+                    scheduleData.push({
+                        weekday: row['週次'],
+                        period: row['節次'],
+                        className: row['班級'],
+                        teacher: row['教師姓名'],
+                        domain: row['領域'],
+                        subject: row['科目'],
+                        courseName: row['語言別/校訂課程名稱']
+                    });
+
+                    classSet.add(row['班級']);
+
+                    if (!teacherSet.has(row['教師姓名'])) {
+                        teacherSet.set(row['教師姓名'], new Set());
+                    }
+                    teacherSet.get(row['教師姓名']).add(row['領域']);
+                });
+
+                // 儲存到全域供後續測試使用
+                window.parsedSchedule = scheduleData;
+                window.parsedClasses = Array.from(classSet);
+                window.parsedTeachers = Array.from(teacherSet.entries()).map(([name, domains]) => ({
+                    name,
+                    domains: Array.from(domains),
+                    homeroomClass: window.testData.teachers.find(t => t.name === name)?.homeroomClass || ''
+                }));
+
+                // 顯示結果
+                let html = `
+                    <div class="success">✓ 課表解析成功</div>
+                    <h3>解析統計</h3>
+                    <table>
+                        <tr><th>項目</th><th>數量</th></tr>
+                        <tr><td>總課程數</td><td>${scheduleData.length}</td></tr>
+                        <tr><td>班級數</td><td>${classSet.size}</td></tr>
+                        <tr><td>教師數</td><td>${teacherSet.size}</td></tr>
+                    </table>
+                    <h3>教師清單</h3>
+                    <table>
+                        <tr><th>姓名</th><th>領域</th><th>導師班級</th><th>每週節數</th></tr>
+                `;
+
+                window.parsedTeachers.forEach(t => {
+                    const weeklyHours = scheduleData.filter(c => c.teacher === t.name).length;
+                    html += `<tr>
+                        <td>${t.name}</td>
+                        <td>${t.domains.join(', ')}</td>
+                        <td>${t.homeroomClass || '-'}</td>
+                        <td>${weeklyHours}</td>
+                    </tr>`;
+                });
+
+                html += '</table>';
+                resultDiv.innerHTML = html;
+
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">✗ 解析失敗: ${error.message}</div>`;
+                console.error(error);
+            }
+        }
+
+        // ===== 測試二：智慧推薦 =====
+        function testRecommendation() {
+            const resultDiv = document.getElementById('recommendation-result');
+
+            if (!window.parsedSchedule) {
+                resultDiv.innerHTML = '<div class="error">請先執行課表解析測試</div>';
+                return;
+            }
+
+            try {
+                const engine = new window.RecommendationEngine();
+
+                // 測試情境：王大明（數學老師）週一第一節要請假
+                const targetCourse = {
+                    weekday: '週一',
+                    period: '第一節',
+                    className: '7年1班',
+                    subject: '數學',
+                    domain: '數學領域',
+                    originalTeacher: '王大明'
+                };
+
+                // 取得推薦
+                const recommendations = engine.getRecommendations(
+                    targetCourse,
+                    window.parsedSchedule,
+                    window.parsedTeachers,
+                    '2026-03-15'
+                );
+
+                // 顯示該時段的課表狀況
+                let html = `
+                    <div class="success">✓ 推薦演算法執行成功</div>
+                    <h3>測試情境</h3>
+                    <p><strong>欲調課程</strong>：${targetCourse.weekday} ${targetCourse.period}，
+                       ${targetCourse.className} ${targetCourse.subject}（${targetCourse.originalTeacher}）</p>
+
+                    <h3>週一第一節各教師狀態</h3>
+                    <table>
+                        <tr><th>教師</th><th>狀態</th><th>課程</th></tr>
+                `;
+
+                window.parsedTeachers.forEach(t => {
+                    const course = window.parsedSchedule.find(c =>
+                        c.teacher === t.name && c.weekday === '週一' && c.period === '第一節'
+                    );
+                    const status = course ? '有課' : '空堂';
+                    const courseInfo = course ? `${course.className} ${course.subject}` : '-';
+                    html += `<tr>
+                        <td>${t.name}</td>
+                        <td style="color: ${course ? 'red' : 'green'}">${status}</td>
+                        <td>${courseInfo}</td>
+                    </tr>`;
+                });
+
+                html += `</table>
+                    <h3>代課教師推薦（已排序）</h3>
+                    <table>
+                        <tr><th>排名</th><th>教師</th><th>分數</th><th>推薦理由</th></tr>
+                `;
+
+                recommendations.forEach((rec, idx) => {
+                    html += `<tr>
+                        <td>${idx + 1}</td>
+                        <td><strong>${rec.teacher.name}</strong></td>
+                        <td>${rec.score}</td>
+                        <td>${rec.reasonText}</td>
+                    </tr>`;
+                });
+
+                html += '</table>';
+
+                // 說明推薦邏輯
+                html += `
+                    <h3>推薦邏輯說明</h3>
+                    <ul>
+                        <li><strong>同領域教師</strong>：+100 分（數學課優先找數學老師）</li>
+                        <li><strong>該班導師</strong>：+50 分（7年1班導師為王大明，但他是請假者）</li>
+                        <li><strong>空堂教師</strong>：+10 分（基礎分）</li>
+                    </ul>
+                `;
+
+                resultDiv.innerHTML = html;
+
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">✗ 推薦失敗: ${error.message}</div>`;
+                console.error(error);
+            }
+        }
+
+        // ===== 測試三：PDF 生成 =====
+        async function testPDFGeneration() {
+            const resultDiv = document.getElementById('pdf-result');
+
+            if (!window.parsedSchedule) {
+                resultDiv.innerHTML = '<div class="error">請先執行課表解析測試</div>';
+                return;
+            }
+
+            try {
+                resultDiv.innerHTML = '<div class="info">正在生成 PDF...</div>';
+
+                const generator = new window.PDFGenerator();
+
+                // 建立測試調課紀錄
+                const testRecord = {
+                    id: 'test-001',
+                    date: '2026-03-15',
+                    weekday: '週一',
+                    period: '第一節',
+                    className: '7年1班',
+                    subject: '數學',
+                    domain: '數學領域',
+                    originalTeacher: '王大明',
+                    substituteTeacher: '趙心怡',
+                    reason: '公假（參加研習）',
+                    createdAt: new Date().toISOString()
+                };
+
+                // 生成 PDF
+                await generator.generateSubstituteForm(
+                    testRecord,
+                    window.parsedSchedule,
+                    window.parsedTeachers
+                );
+
+                resultDiv.innerHTML = `
+                    <div class="success">✓ PDF 生成成功</div>
+                    <p>已下載檔案：調代課單_2026-03-15_7年1班_第一節.pdf</p>
+                    <h3>PDF 內容包含</h3>
+                    <ul>
+                        <li>第 1 頁：原任課教師（王大明）留存聯</li>
+                        <li>第 2 頁：代課教師（趙心怡）留存聯</li>
+                        <li>第 3 頁：班級（7年1班）公告聯</li>
+                        <li>第 4 頁：教學組存查聯</li>
+                    </ul>
+                `;
+
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">✗ PDF 生成失敗: ${error.message}</div>`;
+                console.error(error);
+            }
+        }
+
+        // ===== 測試四：月結算 =====
+        function testSettlement() {
+            const resultDiv = document.getElementById('settlement-result');
+
+            if (!window.parsedSchedule) {
+                resultDiv.innerHTML = '<div class="error">請先執行課表解析測試</div>';
+                return;
+            }
+
+            try {
+                const calculator = new window.SettlementCalculator();
+
+                // 使用虛構的調課紀錄
+                const records = window.testData.substituteRecords;
+
+                // 計算 114 學年度 3 月結算
+                const settlement = calculator.calculate(
+                    114,
+                    3,
+                    window.parsedSchedule,
+                    records,
+                    window.parsedTeachers
+                );
+
+                let html = `
+                    <div class="success">✓ 月結算計算成功</div>
+                    <h3>114 學年度 3 月份 教師授課時數結算表</h3>
+                    <p>假設當月上課 4 週</p>
+                    <h4>本月調課紀錄 (${records.length} 筆)</h4>
+                    <table>
+                        <tr><th>日期</th><th>班級</th><th>科目</th><th>原任課</th><th>代課</th><th>假別</th><th>事由</th></tr>
+                `;
+
+                records.forEach(r => {
+                    const typeText = r.type === 'swap' ? '調課' : '代課';
+                    const leaveTypeColor = r.leaveType === 'official' ? '#22c55e' :
+                                          r.leaveType === 'swap' ? '#3b82f6' : '#ef4444';
+                    html += `<tr>
+                        <td>${r.date}</td>
+                        <td>${r.className}</td>
+                        <td>${r.subject}</td>
+                        <td>${r.originalTeacher}</td>
+                        <td>${r.substituteTeacher}</td>
+                        <td><span style="color:${leaveTypeColor}">${r.leaveTypeName || typeText}</span></td>
+                        <td>${r.reason}</td>
+                    </tr>`;
+                });
+
+                html += `</table>
+                    <h4>結算結果</h4>
+                    <table>
+                        <tr>
+                            <th>教師</th>
+                            <th>每週節數</th>
+                            <th>原定時數</th>
+                            <th>代課增加</th>
+                            <th>被代減少</th>
+                            <th>實際時數</th>
+                        </tr>
+                `;
+
+                settlement.forEach(row => {
+                    const highlight = (row.substituteHours > 0 || row.substitutedHours > 0)
+                        ? 'style="background:#fff3cd"' : '';
+                    html += `<tr ${highlight}>
+                        <td>${row.teacherName}</td>
+                        <td>${row.weeklyHours}</td>
+                        <td>${row.originalHours}</td>
+                        <td style="color:green">${row.substituteHours > 0 ? '+' + row.substituteHours : '-'}</td>
+                        <td style="color:red">${row.substitutedHours > 0 ? '-' + row.substitutedHours : '-'}</td>
+                        <td><strong>${row.actualHours}</strong></td>
+                    </tr>`;
+                });
+
+                html += `</table>
+                    <h4>假別與時數扣減規則</h4>
+                    <table>
+                        <tr><th>假別</th><th>代課教師</th><th>被代課教師</th></tr>
+                        <tr><td style="color:#22c55e">公假 (official)</td><td>+1（增加時數）</td><td>不扣時數（學校支付公費）</td></tr>
+                        <tr><td style="color:#3b82f6">調課 (swap)</td><td>不計（互換）</td><td>不扣時數（互換）</td></tr>
+                        <tr><td style="color:#ef4444">事假/病假/休假/其他</td><td>+1（增加時數）</td><td>-1（扣減時數）</td></tr>
+                    </table>
+                    <h4>計算說明</h4>
+                    <ul>
+                        <li><strong>王大明</strong>：被代課 1 節（3/5 公假-不扣）+ 調課 1 節（3/15 調課-不扣）、代課 1 節（3/12 代周文傑）= 實際 +1</li>
+                        <li><strong>李小華</strong>：被代課 2 節（3/10 病假-扣 1, 3/18 事假-扣 1）= 實際 -2</li>
+                        <li><strong>張美玲</strong>：代課 2 節（3/10, 3/18 代李小華）= 實際 +2</li>
+                        <li><strong>周文傑</strong>：被代課 1 節（3/12 公假-不扣）= 實際 0</li>
+                        <li><strong>趙心怡</strong>：代課 1 節（3/5 代王大明）+ 調課 1 節（3/15 調課-不計）= 實際 +1</li>
+                    </ul>
+                `;
+
+                resultDiv.innerHTML = html;
+
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">✗ 結算失敗: ${error.message}</div>`;
+                console.error(error);
+            }
+        }
+
+        // ===== 完整流程測試 =====
+        async function runFullTest() {
+            const resultDiv = document.getElementById('full-test-result');
+            resultDiv.innerHTML = '<div class="info">執行完整流程測試...</div>';
+
+            let html = '<h3>完整流程測試結果</h3>';
+            let allPassed = true;
+
+            // 步驟 1：課表解析
+            try {
+                await testScheduleParser();
+                html += '<div class="success">✓ 步驟 1：課表解析成功</div>';
+            } catch (e) {
+                html += `<div class="error">✗ 步驟 1：課表解析失敗 - ${e.message}</div>`;
+                allPassed = false;
+            }
+
+            // 步驟 2：智慧推薦
+            try {
+                testRecommendation();
+                html += '<div class="success">✓ 步驟 2：智慧推薦成功</div>';
+            } catch (e) {
+                html += `<div class="error">✗ 步驟 2：智慧推薦失敗 - ${e.message}</div>`;
+                allPassed = false;
+            }
+
+            // 步驟 3：月結算
+            try {
+                testSettlement();
+                html += '<div class="success">✓ 步驟 3：月結算成功</div>';
+            } catch (e) {
+                html += `<div class="error">✗ 步驟 3：月結算失敗 - ${e.message}</div>`;
+                allPassed = false;
+            }
+
+            // 總結
+            if (allPassed) {
+                html += `
+                    <div class="success" style="margin-top:20px; padding:20px; font-size:18px">
+                        <strong>✓ 所有功能測試通過！</strong><br>
+                        系統已準備就緒，可以正式使用。
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div class="error" style="margin-top:20px; padding:20px">
+                        <strong>部分測試未通過，請檢查上方錯誤訊息</strong>
+                    </div>
+                `;
+            }
+
+            resultDiv.innerHTML = html;
+        }
+
+        // 全域函數
+        window.testScheduleParser = testScheduleParser;
+        window.testRecommendation = testRecommendation;
+        window.testPDFGeneration = testPDFGeneration;
+        window.testSettlement = testSettlement;
+        window.runFullTest = runFullTest;
+    </script>
+</body>
+</html>

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>國中調代課自動化系統</title>
+
+    <!-- CDN 引入 -->
+    <!-- PapaParse - CSV 解析 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- jsPDF - PDF 生成 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- jsPDF AutoTable - PDF 表格 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+    <!-- SheetJS (xlsx) - Excel 讀取 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- html2canvas - HTML 轉圖片（用於 PDF 中文支援） -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <link rel="stylesheet" href="src/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 頂部導航 -->
+        <header class="header">
+            <h1>國中調代課自動化系統</h1>
+            <nav class="nav-tabs">
+                <button class="tab-btn active" data-tab="import">課表匯入</button>
+                <button class="tab-btn" data-tab="substitute">調代課申請</button>
+                <button class="tab-btn" data-tab="records">調課紀錄</button>
+                <button class="tab-btn" data-tab="settlement">月結算</button>
+            </nav>
+        </header>
+
+        <main class="main-content">
+            <!-- 頁籤一：課表匯入 -->
+            <section id="import-tab" class="tab-content active">
+                <div class="card">
+                    <h2>步驟一：匯入課表資料</h2>
+                    <p class="description">請上傳 51 智能排課系統匯出的課表檔案（支援 .xls, .xlsx, .csv 格式）</p>
+
+                    <div class="upload-area" id="schedule-upload">
+                        <div class="upload-icon">📅</div>
+                        <p>拖放課表檔案至此處，或<label for="schedule-file" class="upload-link">點擊選擇檔案</label></p>
+                        <input type="file" id="schedule-file" accept=".xls,.xlsx,.csv" hidden>
+                    </div>
+
+                    <div id="schedule-status" class="status-box hidden">
+                        <div class="status-header">
+                            <span class="status-icon">✓</span>
+                            <span class="status-text">課表已載入</span>
+                        </div>
+                        <div class="status-details">
+                            <p>班級數：<span id="class-count">0</span></p>
+                            <p>教師數：<span id="teacher-count">0</span></p>
+                            <p>課程數：<span id="course-count">0</span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>步驟二：匯入/編輯教師屬性</h2>
+                    <p class="description">系統已自動從課表中擷取教師資訊，您可以補充編輯導師班級資訊</p>
+
+                    <div id="teacher-editor" class="hidden">
+                        <table class="data-table" id="teacher-table">
+                            <thead>
+                                <tr>
+                                    <th>教師姓名</th>
+                                    <th>任教領域</th>
+                                    <th>導師班級</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="teacher-tbody">
+                            </tbody>
+                        </table>
+                        <div class="action-buttons" style="margin-top: 1rem;">
+                            <button class="btn btn-secondary" id="add-teacher-btn">+ 新增教師</button>
+                            <button class="btn btn-primary" id="save-data-btn">儲存資料</button>
+                        </div>
+                        <div id="save-status" class="hidden" style="margin-top: 0.5rem;"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Google Sheets 連結設定（選填）</h2>
+                    <p class="description">設定 Google Apps Script Web App URL 以啟用雲端儲存功能</p>
+                    <div class="form-group">
+                        <label for="gas-url">Apps Script Web App URL：</label>
+                        <input type="url" id="gas-url" placeholder="https://script.google.com/macros/s/xxx/exec">
+                        <button class="btn btn-primary" id="test-connection-btn">測試連線</button>
+                    </div>
+                    <div id="connection-status" class="hidden"></div>
+                </div>
+            </section>
+
+            <!-- 頁籤二：調代課申請 -->
+            <section id="substitute-tab" class="tab-content hidden">
+                <!-- 未載入資料提示 -->
+                <div id="substitute-no-data" class="card notice-card">
+                    <div class="notice-icon">⚠️</div>
+                    <h3>尚未載入課表資料</h3>
+                    <p>請先至「課表匯入」頁籤上傳課表檔案</p>
+                </div>
+
+                <div id="substitute-content" class="hidden">
+                <div class="card">
+                    <h2>選擇欲調課的課程</h2>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="sub-teacher">原任課教師：</label>
+                            <select id="sub-teacher">
+                                <option value="">請選擇教師</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="sub-date">調課日期：</label>
+                            <input type="date" id="sub-date">
+                        </div>
+                    </div>
+
+                    <!-- 原任課教師週課表 -->
+                    <div id="original-schedule" class="hidden">
+                        <h3>原任課教師本週課表</h3>
+                        <p class="hint">點擊要調課的課程</p>
+                        <div class="schedule-grid" id="original-schedule-grid">
+                            <!-- 動態生成週課表 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 選中課程資訊 -->
+                <div id="selected-course-info" class="card hidden">
+                    <h2>選中課程資訊</h2>
+                    <div class="course-details">
+                        <p><strong>班級：</strong><span id="sel-class"></span></p>
+                        <p><strong>節次：</strong><span id="sel-period"></span></p>
+                        <p><strong>科目：</strong><span id="sel-subject"></span></p>
+                        <p><strong>原任課教師：</strong><span id="sel-original-teacher"></span></p>
+                    </div>
+
+                    <h3>代課教師推薦（智慧排序）</h3>
+                    <div class="recommendation-list" id="recommendation-list">
+                        <!-- 動態生成推薦列表 -->
+                    </div>
+
+                    <!-- 異動類型選擇 -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="change-type">異動類型：</label>
+                            <select id="change-type">
+                                <option value="substitute">代課（他人代理授課）</option>
+                                <option value="swap">調課（兩位教師互換）</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 代課專用：假別選擇 -->
+                    <div id="substitute-options">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="leave-type">假別：</label>
+                                <select id="leave-type">
+                                    <option value="">請選擇假別</option>
+                                    <option value="official">公假（公費支付，不扣時數）</option>
+                                    <option value="personal">事假（扣時數）</option>
+                                    <option value="sick">病假（扣時數）</option>
+                                    <option value="rest">休假（扣時數）</option>
+                                    <option value="other">其他（扣時數）</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="doc-number-group" style="display: none;">
+                                <label for="doc-number">公假字號：<span style="color: red;">*</span></label>
+                                <input type="text" id="doc-number" placeholder="如：北教字第1140012345號">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="sub-reason">事由說明：</label>
+                            <textarea id="sub-reason" rows="2" placeholder="請輸入詳細事由（如：參加研習、身體不適等）"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- 調課專用：選擇互換教師 -->
+                    <div id="swap-options" class="hidden">
+                        <div class="form-group">
+                            <label for="swap-teacher">選擇互換教師：</label>
+                            <select id="swap-teacher">
+                                <option value="">請先選擇欲調課的課程</option>
+                            </select>
+                            <p class="hint" id="swap-hint">調課限制：僅顯示該時段有相同班級課程的教師</p>
+                        </div>
+                        <div id="swap-validation-error" class="hidden" style="color: #dc2626; padding: 10px; background: #fef2f2; border-radius: 6px; margin-top: 10px;">
+                        </div>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" id="confirm-substitute-btn">確認並產生表單</button>
+                        <button class="btn btn-secondary" id="cancel-substitute-btn">取消</button>
+                    </div>
+                </div>
+                </div>
+            </section>
+
+            <!-- 頁籤三：調課紀錄 -->
+            <section id="records-tab" class="tab-content hidden">
+                <!-- 未載入資料提示 -->
+                <div id="records-no-data" class="card notice-card">
+                    <div class="notice-icon">⚠️</div>
+                    <h3>尚未載入課表資料</h3>
+                    <p>請先至「課表匯入」頁籤上傳課表檔案</p>
+                </div>
+
+                <div id="records-content" class="hidden">
+                <div class="card">
+                    <h2>調代課紀錄查詢</h2>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="record-start-date">起始日期：</label>
+                            <input type="date" id="record-start-date">
+                        </div>
+                        <div class="form-group">
+                            <label for="record-end-date">結束日期：</label>
+                            <input type="date" id="record-end-date">
+                        </div>
+                        <div class="form-group">
+                            <label for="record-teacher">教師篩選：</label>
+                            <select id="record-teacher">
+                                <option value="">全部教師</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" id="search-records-btn">查詢</button>
+                    </div>
+
+                    <table class="data-table" id="records-table">
+                        <thead>
+                            <tr>
+                                <th>日期</th>
+                                <th>班級</th>
+                                <th>節次</th>
+                                <th>科目</th>
+                                <th>原任課教師</th>
+                                <th>代課教師</th>
+                                <th>事由</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="records-tbody">
+                            <tr>
+                                <td colspan="8" class="empty-message">尚無調課紀錄</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                </div>
+            </section>
+
+            <!-- 頁籤四：月結算 -->
+            <section id="settlement-tab" class="tab-content hidden">
+                <!-- 未載入資料提示 -->
+                <div id="settlement-no-data" class="card notice-card">
+                    <div class="notice-icon">⚠️</div>
+                    <h3>尚未載入課表資料</h3>
+                    <p>請先至「課表匯入」頁籤上傳課表檔案</p>
+                </div>
+
+                <div id="settlement-content" class="hidden">
+                <div class="card">
+                    <h2>月結算報表</h2>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="settle-year">學年度：</label>
+                            <select id="settle-year">
+                                <option value="114">114</option>
+                                <option value="113">113</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="settle-month">月份：</label>
+                            <select id="settle-month">
+                                <option value="1">1月</option>
+                                <option value="2">2月</option>
+                                <option value="3">3月</option>
+                                <option value="4">4月</option>
+                                <option value="5">5月</option>
+                                <option value="6">6月</option>
+                                <option value="7">7月</option>
+                                <option value="8">8月</option>
+                                <option value="9">9月</option>
+                                <option value="10">10月</option>
+                                <option value="11">11月</option>
+                                <option value="12">12月</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" id="generate-settlement-btn">產生結算表</button>
+                        <button class="btn btn-secondary" id="export-settlement-btn">匯出 Excel</button>
+                    </div>
+
+                    <div id="settlement-result" class="hidden">
+                        <h3>教師授課時數統計表</h3>
+                        <table class="data-table" id="settlement-table">
+                            <thead>
+                                <tr>
+                                    <th>教師姓名</th>
+                                    <th>原定授課時數</th>
+                                    <th>代課增加時數</th>
+                                    <th>被代課減少時數</th>
+                                    <th>實際授課時數</th>
+                                    <th>超鐘點時數</th>
+                                </tr>
+                            </thead>
+                            <tbody id="settlement-tbody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- 底部資訊 -->
+        <footer class="footer">
+            <p>國中調代課自動化系統 v1.0 | 適用於 51 智能排課系統匯出之課表</p>
+        </footer>
+    </div>
+
+    <!-- 載入 JavaScript 模組 -->
+    <script type="module" src="src/js/app.js"></script>
+</body>
+</html>
