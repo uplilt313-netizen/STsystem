@@ -1189,6 +1189,74 @@ class SubstituteTeacherApp {
         if (savedUrl) {
             document.getElementById('gas-url').value = savedUrl;
         }
+
+        // 設定教學按鈕
+        document.getElementById('show-setup-guide-btn')?.addEventListener('click', () => {
+            this.showSetupGuide();
+        });
+
+        // 關閉教學彈窗
+        document.getElementById('close-guide-btn')?.addEventListener('click', () => {
+            document.getElementById('setup-guide-modal').classList.add('hidden');
+        });
+
+        // 點擊背景關閉教學彈窗
+        document.getElementById('setup-guide-modal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'setup-guide-modal') {
+                e.target.classList.add('hidden');
+            }
+        });
+
+        // 匯出本機資料按鈕
+        document.getElementById('export-local-data-btn')?.addEventListener('click', () => {
+            this.exportLocalData();
+        });
+
+        // 清除所有資料按鈕
+        document.getElementById('clear-local-data-btn')?.addEventListener('click', () => {
+            this.clearLocalData();
+        });
+    }
+
+    /**
+     * 顯示設定教學彈窗
+     */
+    showSetupGuide() {
+        const modal = document.getElementById('setup-guide-modal');
+        modal.classList.remove('hidden');
+    }
+
+    /**
+     * 匯出本機資料
+     */
+    exportLocalData() {
+        const data = this.dataManager.exportToStorage();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `調代課系統備份_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        alert('資料已匯出');
+    }
+
+    /**
+     * 清除所有本機資料
+     */
+    clearLocalData() {
+        if (confirm('確定要清除所有本機資料嗎？此操作無法復原！\n\n建議先使用「匯出本機資料」進行備份。')) {
+            if (confirm('再次確認：清除所有資料？')) {
+                localStorage.removeItem('substituteSystemData');
+                localStorage.removeItem('gasUrl');
+                alert('所有資料已清除，頁面將重新載入');
+                location.reload();
+            }
+        }
     }
 
     /**
