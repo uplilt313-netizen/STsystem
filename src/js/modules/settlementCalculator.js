@@ -7,9 +7,14 @@
  * 1. 原定授課時數 = 該教師在課表中的每週授課節數 × 當月上課週數
  * 2. 代課增加時數 = 該月該教師為他人代課的總節數（不論假別皆 +1）
  * 3. 被代課減少時數 = 該月他人為該教師代課的總節數
- *    - 公假 (official)：不扣時數（學校支付公費）
- *    - 事假/病假/休假/其他：扣時數 (-1)
- *    - 調課 (swap)：不扣時數（互換，時數不變）
+ *    【公付假別 - 不扣時數（學校支付公費）】
+ *    - 公假 (official)
+ *    - 長期病假 (longsick)：3日以上
+ *    - 喪假 (funeral)
+ *    【一般假別 - 扣時數 (-1)】
+ *    - 事假/病假/休假/其他
+ *    【調課 - 不扣時數（互換）】
+ *    - 調課 (swap)
  * 4. 實際授課時數 = 原定時數 + 代課增加 - 被代課減少
  * 5. 超鐘點時數 = 實際授課時數 - 基本授課時數（需另設定）
  */
@@ -22,8 +27,12 @@ export class SettlementCalculator {
         // 每月預設上課週數
         this.defaultWeeksPerMonth = 4;
 
-        // 不扣時數的假別（公假由學校支付，調課為互換）
-        this.noDeductLeaveTypes = ['official', 'swap'];
+        // 不扣時數的假別（公付假別由學校支付，調課為互換）
+        // 支援中文和英文代碼
+        this.noDeductLeaveTypes = [
+            'official', 'longsick', 'funeral', 'swap',  // 英文代碼
+            '公假', '長期病假', '喪假', '調課'           // 中文名稱
+        ];
     }
 
     /**
@@ -148,7 +157,7 @@ export class SettlementCalculator {
     countSubstituteHours(records, teacherName) {
         return records.filter(record =>
             record.substituteTeacher === teacherName &&
-            record.type !== 'swap'  // 調課互換不計入代課增加
+            record.type !== 'swap' && record.type !== '調課'  // 調課互換不計入代課增加
         ).length;
     }
 
@@ -166,7 +175,12 @@ export class SettlementCalculator {
         return records.filter(record => {
             if (record.originalTeacher !== teacherName) return false;
 
-            // 公假和調課不扣時數
+            // 調課不扣時數（檢查 type 欄位，支援中英文）
+            if (record.type === 'swap' || record.type === '調課') {
+                return false;
+            }
+
+            // 公假和調課不扣時數（檢查 leaveType 欄位）
             const leaveType = record.leaveType || '';
             if (this.noDeductLeaveTypes.includes(leaveType)) {
                 return false;
@@ -187,25 +201,36 @@ export class SettlementCalculator {
         const asSubstitute = records.filter(r => r.substituteTeacher === teacherName);
         const asOriginal = records.filter(r => r.originalTeacher === teacherName);
 
-        // 代課統計
-        const substituteCount = asSubstitute.filter(r => r.type !== 'swap').length;
-        const swapAsSubCount = asSubstitute.filter(r => r.type === 'swap').length;
+        // 代課統計（排除調課，支援中英文）
+        const substituteCount = asSubstitute.filter(r =>
+            r.type !== 'swap' && r.type !== '調課'
+        ).length;
+        const swapAsSubCount = asSubstitute.filter(r =>
+            r.type === 'swap' || r.type === '調課'
+        ).length;
 
-        // 被代課統計（按假別分類）
+        // 被代課統計（按假別分類，支援中英文代碼）
         const substitutedByLeaveType = {
-            official: asOriginal.filter(r => r.leaveType === 'official').length,
-            personal: asOriginal.filter(r => r.leaveType === 'personal').length,
-            sick: asOriginal.filter(r => r.leaveType === 'sick').length,
-            rest: asOriginal.filter(r => r.leaveType === 'rest').length,
-            other: asOriginal.filter(r => r.leaveType === 'other').length,
-            swap: asOriginal.filter(r => r.type === 'swap').length
+            official: asOriginal.filter(r => r.leaveType === 'official' || r.leaveType === '公假').length,
+            longsick: asOriginal.filter(r => r.leaveType === 'longsick' || r.leaveType === '長期病假').length,
+            funeral: asOriginal.filter(r => r.leaveType === 'funeral' || r.leaveType === '喪假').length,
+            personal: asOriginal.filter(r => r.leaveType === 'personal' || r.leaveType === '事假').length,
+            sick: asOriginal.filter(r => r.leaveType === 'sick' || r.leaveType === '病假').length,
+            rest: asOriginal.filter(r => r.leaveType === 'rest' || r.leaveType === '休假').length,
+            other: asOriginal.filter(r => r.leaveType === 'other' || r.leaveType === '其他').length,
+            swap: asOriginal.filter(r => r.type === 'swap' || r.type === '調課').length
         };
 
-        // 實際扣減時數（排除公假和調課）
+        // 實際扣減時數（排除公付假別和調課）
         const deductedHours = substitutedByLeaveType.personal +
                               substitutedByLeaveType.sick +
                               substitutedByLeaveType.rest +
                               substitutedByLeaveType.other;
+
+        // 公付假別總次數（不扣時數）
+        const paidLeaveCount = substitutedByLeaveType.official +
+                               substitutedByLeaveType.longsick +
+                               substitutedByLeaveType.funeral;
 
         return {
             teacherName,
@@ -213,7 +238,8 @@ export class SettlementCalculator {
             swapCount: swapAsSubCount + substitutedByLeaveType.swap,  // 調課次數
             substitutedByLeaveType, // 被代課（按假別）
             deductedHours,          // 實際扣減時數
-            officialLeaveCount: substitutedByLeaveType.official  // 公假次數（不扣）
+            paidLeaveCount,         // 公付假別總次數（不扣）
+            officialLeaveCount: substitutedByLeaveType.official  // 公假次數（保留相容性）
         };
     }
 

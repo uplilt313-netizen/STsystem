@@ -382,16 +382,26 @@ class SubstituteTeacherApp {
     }
 
     /**
-     * 當假別變更時觸發（動態顯示公假字號）
+     * 當假別變更時觸發（動態顯示公付假別字號）
      */
     onLeaveTypeChanged(leaveType) {
         const docNumberGroup = document.getElementById('doc-number-group');
         const docNumberInput = document.getElementById('doc-number');
+        const docNumberLabel = docNumberGroup.querySelector('label');
 
-        if (leaveType === 'official') {
-            // 公假：顯示並設為必填
+        // 公付假別：公假、長期病假、喪假
+        const paidLeaveTypes = ['official', 'longsick', 'funeral'];
+
+        if (paidLeaveTypes.includes(leaveType)) {
+            // 公付假別：顯示並設為必填
             docNumberGroup.style.display = 'block';
             docNumberInput.required = true;
+            // 更新標籤文字
+            const labelText = leaveType === 'official' ? '公假字號' :
+                              leaveType === 'longsick' ? '核准文號' : '喪假證明';
+            docNumberLabel.innerHTML = `${labelText}：<span style="color: red;">*</span>`;
+            docNumberInput.placeholder = leaveType === 'official' ? '如：北教字第1140012345號' :
+                                         leaveType === 'longsick' ? '如：核准文號或醫院證明編號' : '如：訃聞或相關證明';
         } else {
             // 其他假別：隱藏並取消必填
             docNumberGroup.style.display = 'none';
@@ -690,11 +700,14 @@ class SubstituteTeacherApp {
                 return;
             }
 
-            // 公假必須填寫字號
-            if (leaveType === 'official') {
+            // 公付假別必須填寫字號/證明
+            const paidLeaveTypes = ['official', 'longsick', 'funeral'];
+            if (paidLeaveTypes.includes(leaveType)) {
                 const docNumber = document.getElementById('doc-number').value.trim();
                 if (!docNumber) {
-                    alert('公假必須填寫公假字號');
+                    const fieldName = leaveType === 'official' ? '公假字號' :
+                                      leaveType === 'longsick' ? '核准文號' : '喪假證明';
+                    alert(`${this.getLeaveTypeName(leaveType)}必須填寫${fieldName}`);
                     document.getElementById('doc-number').focus();
                     return;
                 }
@@ -709,7 +722,7 @@ class SubstituteTeacherApp {
             // 建立代課紀錄
             const record = {
                 id: Date.now().toString(),
-                type: 'substitute',
+                type: '代課',
                 date: date,
                 weekday: this.selectedCourse.weekday,
                 period: this.selectedCourse.period,
@@ -718,9 +731,9 @@ class SubstituteTeacherApp {
                 domain: this.selectedCourse.domain,
                 originalTeacher: this.selectedCourse.originalTeacher,
                 substituteTeacher: this.selectedSubstitute.teacher.name,
-                leaveType: leaveType,
+                leaveType: this.getLeaveTypeName(leaveType),
                 leaveTypeName: this.getLeaveTypeName(leaveType),
-                docNumber: leaveType === 'official' ? document.getElementById('doc-number').value.trim() : '',
+                docNumber: paidLeaveTypes.includes(leaveType) ? document.getElementById('doc-number').value.trim() : '',
                 reason: reason,
                 createdAt: new Date().toISOString()
             };
@@ -750,7 +763,7 @@ class SubstituteTeacherApp {
             // 建立調課紀錄
             const record = {
                 id: Date.now().toString(),
-                type: 'swap',
+                type: '調課',
                 date: date,
                 weekday: this.selectedCourse.weekday,
                 period: this.selectedCourse.period,
@@ -760,7 +773,7 @@ class SubstituteTeacherApp {
                 originalTeacher: this.selectedCourse.originalTeacher,
                 substituteTeacher: this.selectedSubstitute.teacher.name,
                 swapSubject: this.selectedSubstitute.swapCourse.subject,
-                leaveType: 'swap',
+                leaveType: '調課',
                 leaveTypeName: '調課',
                 docNumber: '',
                 reason: '調課互換',
@@ -810,6 +823,8 @@ class SubstituteTeacherApp {
     getLeaveTypeName(leaveType) {
         const leaveTypeNames = {
             'official': '公假',
+            'longsick': '長期病假',
+            'funeral': '喪假',
             'personal': '事假',
             'sick': '病假',
             'rest': '休假',
@@ -1014,11 +1029,14 @@ class SubstituteTeacherApp {
             </div>
         `;
 
-        // 公假顯示字號
-        if (record.leaveType === 'official' && record.docNumber) {
+        // 公付假別顯示字號/證明
+        const paidLeaveNames = ['公假', '長期病假', '喪假'];
+        if (paidLeaveNames.includes(record.leaveType) && record.docNumber) {
+            const labelText = record.leaveType === '公假' ? '公假字號' :
+                              record.leaveType === '長期病假' ? '核准文號' : '喪假證明';
             detailHtml += `
                 <div class="detail-row">
-                    <span class="detail-label">公假字號</span>
+                    <span class="detail-label">${labelText}</span>
                     <span class="detail-value">${record.docNumber}</span>
                 </div>
             `;
