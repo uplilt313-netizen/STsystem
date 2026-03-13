@@ -592,8 +592,8 @@ class SubstituteTeacherApp {
             originalTeacher: teacherName
         };
 
-        // 自動調整日期為符合課程星期的日期
-        this.adjustDateForCourse();
+        // 清空日期，強制用戶手動選取符合的日期
+        this.clearDateAndPrompt();
 
         // 更新選中課程資訊顯示
         document.getElementById('sel-class').textContent = this.selectedCourse.className;
@@ -945,55 +945,50 @@ class SubstituteTeacherApp {
     }
 
     /**
-     * 選擇課程後自動調整日期
+     * 選擇課程後清空日期，強制用戶手動選取
      */
-    adjustDateForCourse() {
+    clearDateAndPrompt() {
         if (!this.selectedCourse) return;
 
-        const currentDate = document.getElementById('sub-date').value;
         const courseWeekday = this.selectedCourse.weekday;
+        const currentDate = document.getElementById('sub-date').value;
 
-        // 檢查當前日期是否符合課程星期
+        // 如果當前日期已符合課程星期，則不清空
         if (currentDate && this.validateDateWeekday(currentDate, courseWeekday)) {
-            return; // 已經符合，不需調整
+            // 隱藏任何警告
+            const warning = document.getElementById('date-weekday-warning');
+            if (warning) warning.style.display = 'none';
+            return;
         }
 
-        // 自動調整為最近符合的日期
-        const newDate = this.findNextMatchingDate(courseWeekday, currentDate || null);
-        document.getElementById('sub-date').value = newDate;
+        // 清空日期欄位
+        document.getElementById('sub-date').value = '';
 
-        // 顯示提示訊息
-        this.showDateAdjustmentHint(courseWeekday, newDate);
+        // 顯示必須選擇對應星期的提示
+        this.showDateSelectionPrompt(courseWeekday);
     }
 
     /**
-     * 顯示日期調整提示
+     * 顯示日期選擇提示
      */
-    showDateAdjustmentHint(weekday, newDate) {
-        const formattedDate = new Date(newDate).toLocaleDateString('zh-TW', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
-
+    showDateSelectionPrompt(weekday) {
         // 建立或更新提示元素
         let hint = document.getElementById('date-adjustment-hint');
         if (!hint) {
             hint = document.createElement('p');
             hint.id = 'date-adjustment-hint';
             hint.className = 'hint';
-            hint.style.color = '#2563eb';
-            hint.style.fontWeight = 'bold';
             const dateInput = document.getElementById('sub-date');
             dateInput.parentNode.appendChild(hint);
         }
-        hint.textContent = `已自動調整為${weekday}：${formattedDate}`;
+        hint.style.color = '#2563eb';
+        hint.style.fontWeight = 'bold';
+        hint.style.backgroundColor = '#eff6ff';
+        hint.style.padding = '8px';
+        hint.style.borderRadius = '4px';
+        hint.style.marginTop = '8px';
+        hint.innerHTML = `📅 請選擇「<strong>${weekday}</strong>」的日期`;
         hint.style.display = 'block';
-
-        // 3秒後隱藏提示
-        setTimeout(() => {
-            hint.style.display = 'none';
-        }, 3000);
     }
 
     /**
@@ -1024,14 +1019,27 @@ class SubstituteTeacherApp {
             dateInput.parentNode.appendChild(warning);
         }
 
+        // 隱藏選擇提示
+        const hint = document.getElementById('date-adjustment-hint');
+
         if (dateWeekday !== courseWeekday) {
             const formattedDate = new Date(date).toLocaleDateString('zh-TW', {
                 year: 'numeric', month: 'long', day: 'numeric'
             });
             warning.innerHTML = `⚠️ 日期不符：${formattedDate} 是「${dateWeekday}」，但課程是「${courseWeekday}」的課`;
             warning.style.display = 'block';
+            if (hint) hint.style.display = 'none';
         } else {
             warning.style.display = 'none';
+            // 日期正確，隱藏提示並顯示確認訊息
+            if (hint) {
+                const formattedDate = new Date(date).toLocaleDateString('zh-TW', {
+                    year: 'numeric', month: 'long', day: 'numeric'
+                });
+                hint.innerHTML = `✅ ${formattedDate}（${courseWeekday}）`;
+                hint.style.color = '#16a34a';
+                hint.style.backgroundColor = '#f0fdf4';
+            }
         }
     }
 
