@@ -617,7 +617,7 @@ class SubstituteTeacherApp {
 
     /**
      * 更新調課可互換課程列表
-     * 顯示同班級不同時段的所有課程供選擇
+     * 顯示同班級不同時段的所有課程，並檢查衝堂
      */
     updateSwapCourseList() {
         const swapCourseSelect = document.getElementById('swap-course');
@@ -633,41 +633,112 @@ class SubstituteTeacherApp {
             return;
         }
 
-        // 找出同班級不同時段的所有課程
+        // 原課程資訊
         const targetClass = this.selectedCourse.className;
         const originalWeekday = this.selectedCourse.weekday;
         const originalPeriod = this.selectedCourse.period;
+        const originalTeacher = this.selectedCourse.originalTeacher;
 
         // 篩選同班級但不同時段的課程
-        const eligibleCourses = scheduleData.filter(course =>
+        const sameclassCourses = scheduleData.filter(course =>
             course.className === targetClass &&
             !(course.weekday === originalWeekday && course.period === originalPeriod)
         );
 
-        if (eligibleCourses.length === 0) {
+        if (sameclassCourses.length === 0) {
             swapCourseSelect.innerHTML = '<option value="">該班級沒有其他課程可調換</option>';
             swapHint.innerHTML = `<span style="color: #dc2626;">⚠ ${targetClass} 只有一堂課，無法進行調課</span>`;
             return;
         }
 
+        // 檢查每堂課是否會造成衝堂
+        const eligibleCourses = [];
+        const conflictCourses = [];
+
+        sameclassCourses.forEach(course => {
+            const conflict = this.checkSwapConflict(originalTeacher, originalWeekday, originalPeriod, course, scheduleData);
+            if (conflict) {
+                conflictCourses.push({ course, conflict });
+            } else {
+                eligibleCourses.push(course);
+            }
+        });
+
         // 按星期、節次排序
         const weekdayOrder = ['週一', '週二', '週三', '週四', '週五'];
-        eligibleCourses.sort((a, b) => {
+        const sortCourses = (a, b) => {
             const weekdayDiff = weekdayOrder.indexOf(a.weekday) - weekdayOrder.indexOf(b.weekday);
             if (weekdayDiff !== 0) return weekdayDiff;
             return a.period.localeCompare(b.period);
-        });
+        };
+        eligibleCourses.sort(sortCourses);
+        conflictCourses.sort((a, b) => sortCourses(a.course, b.course));
 
-        // 建立下拉選單（使用唯一 ID 作為 value）
+        // 建立下拉選單
         let options = '<option value="">請選擇要互換的課程</option>';
-        eligibleCourses.forEach((course, index) => {
+
+        // 可調換的課程
+        eligibleCourses.forEach(course => {
             const courseId = `${course.weekday}_${course.period}_${course.teacher}`;
             options += `<option value="${courseId}">${course.weekday} ${course.period} - ${course.teacher}（${course.subject}）</option>`;
         });
 
+        // 衝堂的課程（顯示為禁用）
+        conflictCourses.forEach(({ course, conflict }) => {
+            const courseId = `${course.weekday}_${course.period}_${course.teacher}`;
+            options += `<option value="${courseId}" disabled style="color: #999;">⚠ ${course.weekday} ${course.period} - ${course.teacher}（${course.subject}）- ${conflict}</option>`;
+        });
+
         swapCourseSelect.innerHTML = options;
-        swapHint.innerHTML = `✓ 找到 ${eligibleCourses.length} 堂可互換課程（${targetClass}）`;
-        swapHint.style.color = '#16a34a';
+
+        if (eligibleCourses.length > 0) {
+            swapHint.innerHTML = `✓ 找到 ${eligibleCourses.length} 堂可互換課程（${targetClass}）` +
+                (conflictCourses.length > 0 ? `<br><span style="color: #dc2626;">⚠ ${conflictCourses.length} 堂因衝堂無法調換</span>` : '');
+            swapHint.style.color = '#16a34a';
+        } else {
+            swapHint.innerHTML = `<span style="color: #dc2626;">⚠ ${targetClass} 的其他課程皆因衝堂無法調換</span>`;
+        }
+    }
+
+    /**
+     * 檢查調課是否會造成衝堂
+     * @param {string} teacherA - 原課程教師
+     * @param {string} weekdayA - 原課程星期
+     * @param {string} periodA - 原課程節次
+     * @param {Object} courseB - 目標課程
+     * @param {Array} scheduleData - 課表資料
+     * @returns {string|null} 衝堂原因，null 表示無衝堂
+     */
+    checkSwapConflict(teacherA, weekdayA, periodA, courseB, scheduleData) {
+        const teacherB = courseB.teacher;
+        const weekdayB = courseB.weekday;
+        const periodB = courseB.period;
+
+        // 檢查 A 老師在時段 B 是否有其他課（排除目標課程的班級）
+        const teacherAConflict = scheduleData.find(course =>
+            course.teacher === teacherA &&
+            course.weekday === weekdayB &&
+            course.period === periodB &&
+            course.className !== courseB.className
+        );
+
+        if (teacherAConflict) {
+            return `${teacherA}在${weekdayB}${periodB}有${teacherAConflict.className}課`;
+        }
+
+        // 檢查 B 老師在時段 A 是否有其他課（排除原課程的班級）
+        const teacherBConflict = scheduleData.find(course =>
+            course.teacher === teacherB &&
+            course.weekday === weekdayA &&
+            course.period === periodA &&
+            course.className !== this.selectedCourse.className
+        );
+
+        if (teacherBConflict) {
+            return `${teacherB}在${weekdayA}${periodA}有${teacherBConflict.className}課`;
+        }
+
+        return null;
     }
 
     /**
