@@ -23,7 +23,15 @@ export class PDFGenerator {
 
         // 星期對照
         this.weekdays = ['週一', '週二', '週三', '週四', '週五'];
-        this.periods = ['第1節', '第2節', '第3節', '第4節', '第5節', '第6節', '第7節'];
+        this.periods = ['第一節', '第二節', '第三節', '第四節', '第五節', '第六節', '第七節'];
+
+        // 節次格式轉換對照表（支援多種格式）
+        this.periodAliases = {
+            '第1節': '第一節', '第2節': '第二節', '第3節': '第三節', '第4節': '第四節',
+            '第5節': '第五節', '第6節': '第六節', '第7節': '第七節',
+            '第一節': '第一節', '第二節': '第二節', '第三節': '第三節', '第四節': '第四節',
+            '第五節': '第五節', '第六節': '第六節', '第七節': '第七節'
+        };
 
         // 學校名稱（可設定）
         this.schoolName = '○○國民中學';
@@ -259,20 +267,33 @@ export class PDFGenerator {
     }
 
     /**
+     * 標準化節次格式
+     * @param {string} period - 節次字串
+     * @returns {string} 標準化後的節次
+     */
+    normalizePeriod(period) {
+        return this.periodAliases[period] || period;
+    }
+
+    /**
      * 建立週課表 HTML（僅顯示異動課程，其他留空）
      */
     createScheduleTableHTML(schedule, record, teacherName) {
         const isSwap = record.type === '調課';
         let tableRows = '';
 
+        // 標準化 record 中的節次格式
+        const recordPeriod = this.normalizePeriod(record.period);
+        const swapPeriod = record.swapPeriod ? this.normalizePeriod(record.swapPeriod) : null;
+
         this.periods.forEach(period => {
             let row = `<td style="padding: 6px 4px; border: 1px solid #333; font-weight: bold; text-align: center; width: 50px;">${period}</td>`;
 
             this.weekdays.forEach(weekday => {
                 // 檢查是否為本次異動的節次（時段 A）
-                const isSlotA = record.weekday === weekday && record.period === period;
+                const isSlotA = record.weekday === weekday && recordPeriod === period;
                 // 檢查是否為調課的另一時段（時段 B）
-                const isSlotB = isSwap && record.swapWeekday === weekday && record.swapPeriod === period;
+                const isSlotB = isSwap && record.swapWeekday === weekday && swapPeriod === period;
 
                 if (isSlotA) {
                     // 時段 A：藍色標記
