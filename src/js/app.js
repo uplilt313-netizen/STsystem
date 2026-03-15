@@ -231,30 +231,32 @@ class SubstituteTeacherApp {
         const nameWithoutExt = fileName.replace(/\.(xls|xlsx|csv)$/i, '');
 
         // 常見的檔名格式：
-        // 1. "XX國中_課表" 或 "XX國中-課表"
-        // 2. "XX國民中學_課表"
-        // 3. "課表_XX國中"
-        // 4. 純學校名稱
+        // 1. "114學年度-縣立測試國中-課表-20260311161643"
+        // 2. "XX國中_課表" 或 "XX國中-課表"
+        // 3. "XX國民中學_課表"
+        // 4. "課表_XX國中"
 
-        // 嘗試用常見分隔符號分割
-        const separators = ['_', '-', ' '];
-        for (const sep of separators) {
-            const parts = nameWithoutExt.split(sep);
-            for (const part of parts) {
-                // 檢查是否包含「國中」、「國民中學」、「中學」等關鍵字
-                if (part.includes('國中') || part.includes('國民中學') || part.includes('中學') || part.includes('高中')) {
+        // 學校關鍵字（優先順序：完整名稱 > 簡稱）
+        const schoolKeywords = ['國民中學', '國民小學', '國中', '國小', '中學', '高中', '高職'];
+
+        // 用常見分隔符號分割
+        const parts = nameWithoutExt.split(/[-_\s]+/);
+
+        // 遍歷每個部分，找出包含學校關鍵字的部分
+        for (const part of parts) {
+            for (const keyword of schoolKeywords) {
+                if (part.includes(keyword)) {
+                    // 找到包含學校關鍵字的部分，直接返回
                     return part.trim();
                 }
             }
         }
 
-        // 如果整個檔名包含學校關鍵字，直接使用
-        if (nameWithoutExt.includes('國中') || nameWithoutExt.includes('國民中學') || nameWithoutExt.includes('中學')) {
-            // 嘗試擷取學校名稱部分
-            const match = nameWithoutExt.match(/(.{2,}(?:國民中學|國中|中學|高中))/);
-            if (match) {
-                return match[1].trim();
-            }
+        // 如果分割後找不到，嘗試用正則表達式從整個檔名中擷取
+        // 匹配模式：[縣市立/私立等前綴] + 學校名稱 + 學校類型關鍵字
+        const match = nameWithoutExt.match(/((?:縣立|市立|私立|國立)?[^\-_\s]*(?:國民中學|國民小學|國中|國小|中學|高中|高職))/);
+        if (match) {
+            return match[1].trim();
         }
 
         // 無法識別，返回空字串
