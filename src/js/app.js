@@ -13,7 +13,6 @@ import { DataManager } from './modules/dataManager.js';
 import { ScheduleParser } from './modules/scheduleParser.js';
 import { RecommendationEngine } from './modules/recommendationEngine.js';
 import { PDFGenerator } from './modules/pdfGenerator.js';
-import { GoogleSheetsAPI } from './modules/googleSheetsAPI.js';
 import { SettlementCalculator } from './modules/settlementCalculator.js';
 
 // 匯入 Firebase 相關模組
@@ -45,7 +44,6 @@ class SubstituteTeacherApp {
         this.scheduleParser = new ScheduleParser();
         this.recommendationEngine = new RecommendationEngine();
         this.pdfGenerator = new PDFGenerator();
-        this.googleSheetsAPI = new GoogleSheetsAPI();
         this.settlementCalculator = new SettlementCalculator();
 
         // 目前選中的課程資訊
@@ -75,8 +73,8 @@ class SubstituteTeacherApp {
         // 綁定結算相關事件
         this.bindSettlementEvents();
 
-        // 綁定 Google Sheets 連線事件
-        this.bindGoogleSheetsEvents();
+        // 綁定資料管理事件
+        this.bindDataManagementEvents();
 
         // 綁定 Firebase 認證相關事件
         this.bindFirebaseAuthEvents();
@@ -1769,12 +1767,9 @@ class SubstituteTeacherApp {
      * 儲存並處理紀錄
      */
     async saveAndProcessRecord(record) {
-        // 儲存紀錄到本地
+        // 儲存紀錄到本地（會自動同步到 Firebase 雲端）
         this.dataManager.addSubstituteRecord(record);
         this.saveDataToStorage();
-
-        // 嘗試同步到 Google Sheets
-        const syncSuccess = await this.syncRecordToGoogleSheets(record);
 
         // 生成 PDF
         await this.generateSubstitutePDF(record);
@@ -1784,17 +1779,8 @@ class SubstituteTeacherApp {
 
         // 顯示結果
         const typeText = record.type === '調課' ? '調課' : '代課';
-        const gasUrl = document.getElementById('gas-url').value;
-
-        if (gasUrl) {
-            if (syncSuccess) {
-                alert(`${typeText}紀錄已儲存並同步到雲端，PDF 已生成`);
-            } else {
-                alert(`${typeText}紀錄已儲存到本地，PDF 已生成\n\n⚠ 雲端同步失敗，請檢查 Google Sheets 設定`);
-            }
-        } else {
-            alert(`${typeText}紀錄已儲存到本地，PDF 已生成\n\n提示：可至「設定」頁籤設定 Google Sheets 啟用雲端同步`);
-        }
+        const syncText = isSignedIn() ? '並同步到雲端' : '';
+        alert(`${typeText}紀錄已儲存${syncText}，PDF 已生成`);
     }
 
     /**
@@ -2085,36 +2071,6 @@ class SubstituteTeacherApp {
         const teachers = this.dataManager.getTeachers();
 
         await this.pdfGenerator.generateSubstituteForm(record, scheduleData, teachers);
-    }
-
-    /**
-     * 同步紀錄到 Google Sheets
-     * @returns {Promise<boolean>} 同步是否成功
-     */
-    async syncRecordToGoogleSheets(record) {
-        const url = document.getElementById('gas-url').value;
-        if (!url) {
-            console.log('未設定 Google Sheets URL，跳過雲端同步');
-            return false;
-        }
-
-        try {
-            console.log('正在同步到 Google Sheets...', record);
-            const result = await this.googleSheetsAPI.appendRecord(url, record);
-            console.log('Google Sheets 同步結果:', result);
-
-            if (result && result.success) {
-                console.log('紀錄已成功同步到 Google Sheets');
-                return true;
-            } else {
-                console.warn('Google Sheets 同步回應異常:', result);
-                return false;
-            }
-        } catch (error) {
-            console.error('同步到 Google Sheets 失敗:', error);
-            // 不阻止本地儲存，只顯示警告
-            return false;
-        }
     }
 
     /**
@@ -2421,57 +2377,9 @@ class SubstituteTeacherApp {
     }
 
     /**
-     * 綁定 Google Sheets 連線事件
+     * 綁定資料管理事件
      */
-    bindGoogleSheetsEvents() {
-        document.getElementById('test-connection-btn').addEventListener('click', async () => {
-            const url = document.getElementById('gas-url').value;
-            if (!url) {
-                alert('請輸入 Apps Script Web App URL');
-                return;
-            }
-
-            const statusDiv = document.getElementById('connection-status');
-            statusDiv.classList.remove('hidden');
-            statusDiv.innerHTML = '<span class="loading"></span> 測試連線中...';
-
-            try {
-                const result = await this.googleSheetsAPI.testConnection(url);
-                if (result.success) {
-                    statusDiv.innerHTML = '<span style="color: var(--success-color);">✓ 連線成功</span>';
-                    // 儲存 URL
-                    localStorage.setItem('gasUrl', url);
-                } else {
-                    statusDiv.innerHTML = `<span style="color: var(--danger-color);">✗ 連線失敗: ${result.error}</span>`;
-                }
-            } catch (error) {
-                statusDiv.innerHTML = `<span style="color: var(--danger-color);">✗ 連線失敗: ${error.message}</span>`;
-            }
-        });
-
-        // 載入儲存的 URL
-        const savedUrl = localStorage.getItem('gasUrl');
-        if (savedUrl) {
-            document.getElementById('gas-url').value = savedUrl;
-        }
-
-        // 設定教學按鈕
-        document.getElementById('show-setup-guide-btn')?.addEventListener('click', () => {
-            this.showSetupGuide();
-        });
-
-        // 關閉教學彈窗
-        document.getElementById('close-guide-btn')?.addEventListener('click', () => {
-            document.getElementById('setup-guide-modal').classList.add('hidden');
-        });
-
-        // 點擊背景關閉教學彈窗
-        document.getElementById('setup-guide-modal')?.addEventListener('click', (e) => {
-            if (e.target.id === 'setup-guide-modal') {
-                e.target.classList.add('hidden');
-            }
-        });
-
+    bindDataManagementEvents() {
         // 匯出本機資料按鈕
         document.getElementById('export-local-data-btn')?.addEventListener('click', () => {
             this.exportLocalData();
@@ -2501,14 +2409,6 @@ class SubstituteTeacherApp {
         document.getElementById('cancel-import-btn')?.addEventListener('click', () => {
             this.cancelImport();
         });
-    }
-
-    /**
-     * 顯示設定教學彈窗
-     */
-    showSetupGuide() {
-        const modal = document.getElementById('setup-guide-modal');
-        modal.classList.remove('hidden');
     }
 
     /**
