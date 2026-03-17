@@ -4,17 +4,18 @@
  * 負責：
  * - 動態載入 Firebase SDK
  * - Firebase 初始化
- * - 設定管理
+ * - 內建設定（所有使用者共用同一個 Firebase 專案，資料依 UID 隔離）
  */
 
-// Firebase SDK 版本
-const FIREBASE_VERSION = '10.7.1';
-
-// Firebase SDK CDN URLs
-const FIREBASE_CDNS = {
-    app: `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-app.js`,
-    auth: `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-auth.js`,
-    firestore: `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-firestore.js`
+// Firebase 內建設定
+const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDQt1zrPoKEM96D78JidCJW0OQS69swzKY",
+    authDomain: "stsystem-9dbdd.firebaseapp.com",
+    projectId: "stsystem-9dbdd",
+    storageBucket: "stsystem-9dbdd.firebasestorage.app",
+    messagingSenderId: "585133026368",
+    appId: "1:585133026368:web:f6943ff8adde09123383a5",
+    measurementId: "G-WL87B39G8W"
 };
 
 // Firebase 實例
@@ -86,68 +87,13 @@ async function loadFirebaseSDK() {
 }
 
 /**
- * 從 localStorage 取得 Firebase 設定
- * @returns {Object|null}
- */
-function getStoredConfig() {
-    const config = localStorage.getItem('firebaseConfig');
-    if (config) {
-        try {
-            return JSON.parse(config);
-        } catch {
-            return null;
-        }
-    }
-    return null;
-}
-
-/**
- * 儲存 Firebase 設定到 localStorage
- * @param {Object} config - Firebase 設定
- */
-function saveConfig(config) {
-    localStorage.setItem('firebaseConfig', JSON.stringify(config));
-}
-
-/**
- * 清除 Firebase 設定
- */
-function clearConfig() {
-    localStorage.removeItem('firebaseConfig');
-}
-
-/**
- * 驗證 Firebase 設定是否完整
- * @param {Object} config - Firebase 設定
- * @returns {boolean}
- */
-function validateConfig(config) {
-    const requiredFields = ['apiKey', 'authDomain', 'projectId'];
-    return requiredFields.every(field => config && config[field]);
-}
-
-/**
  * 初始化 Firebase
- * @param {Object} config - Firebase 設定（可選，若不提供則從 localStorage 讀取）
  * @returns {Promise<{app: Object, auth: Object, db: Object}|null>}
  */
-async function initializeFirebase(config = null) {
+async function initializeFirebase() {
     // 如果已初始化，直接返回
     if (firebaseApp && auth && db) {
         return { app: firebaseApp, auth, db };
-    }
-
-    // 取得設定
-    const firebaseConfig = config || getStoredConfig();
-
-    if (!firebaseConfig) {
-        console.log('尚未設定 Firebase，請先完成設定');
-        return null;
-    }
-
-    if (!validateConfig(firebaseConfig)) {
-        console.error('Firebase 設定不完整');
-        return null;
     }
 
     try {
@@ -157,7 +103,7 @@ async function initializeFirebase(config = null) {
         const { initializeApp, getAuth, getFirestore, enableIndexedDbPersistence } = window.firebaseModules;
 
         // 初始化 Firebase App
-        firebaseApp = initializeApp(firebaseConfig);
+        firebaseApp = initializeApp(FIREBASE_CONFIG);
 
         // 初始化 Auth
         auth = getAuth(firebaseApp);
@@ -175,11 +121,6 @@ async function initializeFirebase(config = null) {
             } else if (err.code === 'unimplemented') {
                 console.warn('瀏覽器不支援離線持久化');
             }
-        }
-
-        // 儲存設定
-        if (config) {
-            saveConfig(config);
         }
 
         console.log('Firebase 初始化成功');
@@ -215,15 +156,7 @@ function isFirebaseInitialized() {
 }
 
 /**
- * 檢查是否有儲存的 Firebase 設定
- * @returns {boolean}
- */
-function hasStoredConfig() {
-    return getStoredConfig() !== null;
-}
-
-/**
- * 重置 Firebase（用於切換帳號或重新設定）
+ * 重置 Firebase（用於切換帳號）
  */
 function resetFirebase() {
     firebaseApp = null;
@@ -234,13 +167,8 @@ function resetFirebase() {
 export {
     loadFirebaseSDK,
     initializeFirebase,
-    getStoredConfig,
-    saveConfig,
-    clearConfig,
-    validateConfig,
     getAuthInstance,
     getDbInstance,
     isFirebaseInitialized,
-    hasStoredConfig,
     resetFirebase
 };

@@ -457,124 +457,48 @@
 
             <!-- 頁籤五：設定 -->
             <section id="settings-tab" class="tab-content hidden">
-                <!-- Firebase 雲端同步設定（新） -->
+                <!-- 雲端同步說明 -->
                 <div class="card">
-                    <h2>Firebase 雲端同步設定</h2>
-                    <p class="description">設定 Firebase 以啟用 Google 帳號登入和跨裝置即時同步功能</p>
+                    <h2>雲端同步功能</h2>
+                    <p class="description">使用 Google 帳號登入後，您的資料將自動同步到雲端，可在不同裝置間存取</p>
 
-                    <!-- Firebase 設定狀態 -->
-                    <div id="firebase-config-status" class="firebase-status">
-                        <div id="firebase-not-configured" class="firebase-status-item">
-                            <span class="status-badge status-warning">未設定</span>
-                            <span>Firebase 尚未設定，請按照下方教學完成設定</span>
+                    <div class="cloud-sync-info">
+                        <div class="sync-feature">
+                            <span class="feature-icon">🔐</span>
+                            <div class="feature-content">
+                                <strong>安全登入</strong>
+                                <p>使用 Google 帳號登入，無需額外註冊</p>
+                            </div>
                         </div>
-                        <div id="firebase-configured" class="firebase-status-item hidden">
-                            <span class="status-badge status-success">已設定</span>
-                            <span>Firebase 已設定完成，可使用 Google 登入</span>
-                            <button class="btn btn-sm btn-secondary" id="reset-firebase-config-btn">重新設定</button>
+                        <div class="sync-feature">
+                            <span class="feature-icon">☁️</span>
+                            <div class="feature-content">
+                                <strong>自動同步</strong>
+                                <p>資料變更自動同步到雲端，無需手動操作</p>
+                            </div>
+                        </div>
+                        <div class="sync-feature">
+                            <span class="feature-icon">📱</span>
+                            <div class="feature-content">
+                                <strong>跨裝置存取</strong>
+                                <p>在任何裝置登入同一帳號，即可存取相同資料</p>
+                            </div>
+                        </div>
+                        <div class="sync-feature">
+                            <span class="feature-icon">🔒</span>
+                            <div class="feature-content">
+                                <strong>資料隔離</strong>
+                                <p>每位使用者的資料獨立儲存，互不影響</p>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Firebase 設定表單 -->
-                    <div id="firebase-config-form" class="firebase-config-form">
-                        <div class="form-group" style="margin-bottom: 1rem;">
-                            <label for="firebase-config-input">Firebase 設定 JSON：</label>
-                            <textarea id="firebase-config-input" rows="8" placeholder='請貼上從 Firebase 控制台複製的設定，格式如下：
-{
-  "apiKey": "AIza...",
-  "authDomain": "your-project.firebaseapp.com",
-  "projectId": "your-project",
-  "storageBucket": "your-project.appspot.com",
-  "messagingSenderId": "123456789",
-  "appId": "1:123456789:web:abc123"
-}'></textarea>
+                    <div class="sync-status-section" id="sync-status-section">
+                        <div id="sync-logged-out" class="sync-login-prompt">
+                            <p>點擊右上角的「使用 Google 登入」按鈕開始使用雲端同步功能</p>
                         </div>
-                        <div class="action-buttons">
-                            <button class="btn btn-primary" id="save-firebase-config-btn">儲存設定</button>
-                            <button class="btn btn-secondary" id="show-firebase-guide-btn">設定教學</button>
-                        </div>
-                        <div id="firebase-config-error" class="error-message hidden"></div>
-                    </div>
-                </div>
-
-                <!-- Firebase 設定教學彈窗 -->
-                <div id="firebase-guide-modal" class="modal hidden">
-                    <div class="modal-content" style="max-width: 750px;">
-                        <div class="modal-header">
-                            <h3>Firebase 雲端同步設定教學</h3>
-                            <button class="modal-close" id="close-firebase-guide-btn">&times;</button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="guide-section">
-                                <h4>步驟一：建立 Firebase 專案</h4>
-                                <ol>
-                                    <li>前往 <a href="https://console.firebase.google.com" target="_blank">Firebase 控制台</a></li>
-                                    <li>點擊「新增專案」，輸入專案名稱（如：substitute-teacher-system）</li>
-                                    <li>可選擇是否啟用 Google Analytics（非必要）</li>
-                                    <li>點擊「建立專案」，等待建立完成</li>
-                                </ol>
-                            </div>
-
-                            <div class="guide-section">
-                                <h4>步驟二：啟用 Google 登入</h4>
-                                <ol>
-                                    <li>在左側選單點擊「Authentication」→「開始使用」</li>
-                                    <li>選擇「Sign-in method」分頁</li>
-                                    <li>點擊「Google」，啟用它</li>
-                                    <li>設定專案的公開名稱和支援電子郵件</li>
-                                    <li>點擊「儲存」</li>
-                                </ol>
-                            </div>
-
-                            <div class="guide-section">
-                                <h4>步驟三：建立 Firestore Database</h4>
-                                <ol>
-                                    <li>在左側選單點擊「Firestore Database」→「建立資料庫」</li>
-                                    <li>選擇「以正式環境規則啟動」</li>
-                                    <li>選擇資料庫位置：<code>asia-east1</code>（台灣）</li>
-                                    <li>點擊「啟用」</li>
-                                    <li>前往「規則」分頁，將規則改為：<pre style="background: #f1f5f9; padding: 10px; border-radius: 4px; overflow-x: auto;">rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null
-        && request.auth.uid == userId;
-    }
-  }
-}</pre></li>
-                                    <li>點擊「發布」</li>
-                                </ol>
-                            </div>
-
-                            <div class="guide-section">
-                                <h4>步驟四：新增授權網域</h4>
-                                <ol>
-                                    <li>在「Authentication」→「Settings」→「授權網域」</li>
-                                    <li>新增您的 GitHub Pages 網址（如：<code>username.github.io</code>）</li>
-                                    <li>如果使用 localhost 測試，確認 <code>localhost</code> 已在列表中</li>
-                                </ol>
-                            </div>
-
-                            <div class="guide-section">
-                                <h4>步驟五：取得設定資訊</h4>
-                                <ol>
-                                    <li>點擊專案概覽旁的齒輪圖示 → 「專案設定」</li>
-                                    <li>向下捲動到「您的應用程式」區塊</li>
-                                    <li>點擊「</>」(Web) 圖示新增網頁應用程式</li>
-                                    <li>輸入應用程式名稱，點擊「註冊應用程式」</li>
-                                    <li>複製 <code>firebaseConfig</code> 物件的內容</li>
-                                    <li>貼到上方的設定欄位中</li>
-                                </ol>
-                            </div>
-
-                            <div class="guide-note">
-                                <strong>注意事項：</strong>
-                                <ul>
-                                    <li>Firebase 免費方案每日可處理 50,000 次讀取、20,000 次寫入</li>
-                                    <li>設定資訊僅儲存在您的瀏覽器中，不會上傳到任何伺服器</li>
-                                    <li>每個使用者的資料都儲存在自己的帳號下，其他人無法存取</li>
-                                </ul>
-                            </div>
+                        <div id="sync-logged-in" class="sync-account-info hidden">
+                            <p>✓ 已登入，資料將自動同步到雲端</p>
                         </div>
                     </div>
                 </div>

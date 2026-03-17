@@ -19,10 +19,6 @@ import { SettlementCalculator } from './modules/settlementCalculator.js';
 // 匯入 Firebase 相關模組
 import {
     initializeFirebase,
-    hasStoredConfig,
-    saveConfig,
-    clearConfig,
-    validateConfig,
     isFirebaseInitialized
 } from './modules/firebaseConfig.js';
 import {
@@ -101,31 +97,26 @@ class SubstituteTeacherApp {
      * 初始化 Firebase
      */
     async initFirebase() {
-        // 更新 Firebase 設定狀態 UI
-        this.updateFirebaseConfigUI();
+        try {
+            // 初始化 Firebase（使用內建設定）
+            await initializeFirebase();
 
-        // 如果有儲存的設定，嘗試初始化
-        if (hasStoredConfig()) {
-            try {
-                await initializeFirebase();
+            // 初始化認證服務
+            await initAuthService();
 
-                // 初始化認證服務
-                await initAuthService();
+            // 監聽認證狀態變更
+            onAuthStateChange((user) => {
+                this.onAuthStateChanged(user);
+            });
 
-                // 監聽認證狀態變更
-                onAuthStateChange((user) => {
-                    this.onAuthStateChanged(user);
-                });
+            // 監聯同步狀態變更
+            onSyncStatusChange((status) => {
+                this.updateSyncStatusUI(status);
+            });
 
-                // 監聽同步狀態變更
-                onSyncStatusChange((status) => {
-                    this.updateSyncStatusUI(status);
-                });
-
-                console.log('Firebase 初始化完成');
-            } catch (error) {
-                console.error('Firebase 初始化失敗:', error);
-            }
+            console.log('Firebase 初始化完成');
+        } catch (error) {
+            console.error('Firebase 初始化失敗:', error);
         }
     }
 
@@ -140,22 +131,6 @@ class SubstituteTeacherApp {
         // 登出按鈕
         const signoutBtn = document.getElementById('signout-btn');
         signoutBtn?.addEventListener('click', () => this.handleSignOut());
-
-        // 儲存 Firebase 設定按鈕
-        const saveFirebaseConfigBtn = document.getElementById('save-firebase-config-btn');
-        saveFirebaseConfigBtn?.addEventListener('click', () => this.saveFirebaseConfig());
-
-        // 重新設定 Firebase 按鈕
-        const resetFirebaseConfigBtn = document.getElementById('reset-firebase-config-btn');
-        resetFirebaseConfigBtn?.addEventListener('click', () => this.resetFirebaseConfig());
-
-        // 顯示 Firebase 教學按鈕
-        const showFirebaseGuideBtn = document.getElementById('show-firebase-guide-btn');
-        showFirebaseGuideBtn?.addEventListener('click', () => this.showFirebaseGuide());
-
-        // 關閉 Firebase 教學彈窗
-        const closeFirebaseGuideBtn = document.getElementById('close-firebase-guide-btn');
-        closeFirebaseGuideBtn?.addEventListener('click', () => this.hideFirebaseGuide());
 
         // 同步衝突對話框相關
         const conflictOptions = document.querySelectorAll('.conflict-option');
@@ -173,11 +148,6 @@ class SubstituteTeacherApp {
         exportBeforeSyncBtn?.addEventListener('click', () => this.exportLocalData());
 
         // 點擊 modal 外部關閉
-        const firebaseGuideModal = document.getElementById('firebase-guide-modal');
-        firebaseGuideModal?.addEventListener('click', (e) => {
-            if (e.target === firebaseGuideModal) this.hideFirebaseGuide();
-        });
-
         const syncConflictModal = document.getElementById('sync-conflict-modal');
         syncConflictModal?.addEventListener('click', (e) => {
             if (e.target === syncConflictModal) this.hideSyncConflictModal();
@@ -185,142 +155,25 @@ class SubstituteTeacherApp {
     }
 
     /**
-     * 更新 Firebase 設定 UI
+     * 更新雲端同步狀態區塊
      */
-    updateFirebaseConfigUI() {
-        const notConfigured = document.getElementById('firebase-not-configured');
-        const configured = document.getElementById('firebase-configured');
-        const configForm = document.getElementById('firebase-config-form');
+    updateSyncStatusSection(isLoggedIn) {
+        const loggedOut = document.getElementById('sync-logged-out');
+        const loggedIn = document.getElementById('sync-logged-in');
 
-        if (hasStoredConfig()) {
-            notConfigured?.classList.add('hidden');
-            configured?.classList.remove('hidden');
-            configForm?.classList.add('hidden');
+        if (isLoggedIn) {
+            loggedOut?.classList.add('hidden');
+            loggedIn?.classList.remove('hidden');
         } else {
-            notConfigured?.classList.remove('hidden');
-            configured?.classList.add('hidden');
-            configForm?.classList.remove('hidden');
+            loggedOut?.classList.remove('hidden');
+            loggedIn?.classList.add('hidden');
         }
-    }
-
-    /**
-     * 儲存 Firebase 設定
-     */
-    async saveFirebaseConfig() {
-        const configInput = document.getElementById('firebase-config-input');
-        const errorElement = document.getElementById('firebase-config-error');
-
-        if (!configInput) return;
-
-        const configText = configInput.value.trim();
-
-        if (!configText) {
-            this.showFirebaseConfigError('請輸入 Firebase 設定');
-            return;
-        }
-
-        try {
-            // 嘗試解析 JSON
-            const config = JSON.parse(configText);
-
-            // 驗證必要欄位
-            if (!validateConfig(config)) {
-                this.showFirebaseConfigError('設定缺少必要欄位（apiKey, authDomain, projectId）');
-                return;
-            }
-
-            // 儲存設定
-            saveConfig(config);
-
-            // 初始化 Firebase
-            await initializeFirebase(config);
-            await initAuthService();
-
-            // 監聽認證狀態變更
-            onAuthStateChange((user) => {
-                this.onAuthStateChanged(user);
-            });
-
-            // 監聽同步狀態變更
-            onSyncStatusChange((status) => {
-                this.updateSyncStatusUI(status);
-            });
-
-            // 更新 UI
-            this.updateFirebaseConfigUI();
-            errorElement?.classList.add('hidden');
-
-            alert('Firebase 設定已儲存！現在可以使用 Google 帳號登入。');
-        } catch (e) {
-            if (e instanceof SyntaxError) {
-                this.showFirebaseConfigError('JSON 格式錯誤，請確認格式正確');
-            } else {
-                this.showFirebaseConfigError('設定儲存失敗：' + e.message);
-            }
-        }
-    }
-
-    /**
-     * 顯示 Firebase 設定錯誤
-     */
-    showFirebaseConfigError(message) {
-        const errorElement = document.getElementById('firebase-config-error');
-        if (errorElement) {
-            errorElement.textContent = message;
-            errorElement.classList.remove('hidden');
-        }
-    }
-
-    /**
-     * 重新設定 Firebase
-     */
-    resetFirebaseConfig() {
-        if (!confirm('確定要重新設定 Firebase 嗎？這將會登出目前的帳號。')) {
-            return;
-        }
-
-        // 登出
-        this.handleSignOut();
-
-        // 清除設定
-        clearConfig();
-
-        // 更新 UI
-        this.updateFirebaseConfigUI();
-
-        // 清空輸入框
-        const configInput = document.getElementById('firebase-config-input');
-        if (configInput) configInput.value = '';
-    }
-
-    /**
-     * 顯示 Firebase 教學
-     */
-    showFirebaseGuide() {
-        const modal = document.getElementById('firebase-guide-modal');
-        modal?.classList.remove('hidden');
-    }
-
-    /**
-     * 隱藏 Firebase 教學
-     */
-    hideFirebaseGuide() {
-        const modal = document.getElementById('firebase-guide-modal');
-        modal?.classList.add('hidden');
     }
 
     /**
      * 處理 Google 登入
      */
     async handleGoogleSignIn() {
-        if (!isFirebaseInitialized()) {
-            alert('請先完成 Firebase 設定');
-            // 切換到設定頁籤
-            const settingsTab = document.querySelector('.tab-btn[data-tab="settings"]');
-            settingsTab?.click();
-            return;
-        }
-
         try {
             const user = await signInWithGoogle();
             console.log('登入成功:', user);
@@ -369,12 +222,18 @@ class SubstituteTeacherApp {
                 userName.textContent = userInfo.displayName;
             }
 
+            // 更新設定頁籤的雲端同步狀態
+            this.updateSyncStatusSection(true);
+
             // 檢查同步狀態
             await this.checkAndHandleSync();
         } else {
             // 已登出
             loggedOut?.classList.remove('hidden');
             loggedIn?.classList.add('hidden');
+
+            // 更新設定頁籤的雲端同步狀態
+            this.updateSyncStatusSection(false);
 
             // 停用即時同步
             this.dataManager.disableRealtimeSync();
