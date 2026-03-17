@@ -16,6 +16,29 @@ import { PDFGenerator } from './modules/pdfGenerator.js';
 import { GoogleSheetsAPI } from './modules/googleSheetsAPI.js';
 import { SettlementCalculator } from './modules/settlementCalculator.js';
 
+// 匯入 Firebase 相關模組
+import {
+    initializeFirebase,
+    hasStoredConfig,
+    saveConfig,
+    clearConfig,
+    validateConfig,
+    isFirebaseInitialized
+} from './modules/firebaseConfig.js';
+import {
+    initAuthService,
+    signInWithGoogle,
+    signOutUser,
+    onAuthStateChange,
+    isSignedIn,
+    getUserInfo
+} from './modules/authService.js';
+import {
+    onSyncStatusChange,
+    formatSyncStatus,
+    SyncStatus
+} from './modules/cloudSyncService.js';
+
 /**
  * 主應用程式類別
  */
@@ -59,13 +82,503 @@ class SubstituteTeacherApp {
         // 綁定 Google Sheets 連線事件
         this.bindGoogleSheetsEvents();
 
+        // 綁定 Firebase 認證相關事件
+        this.bindFirebaseAuthEvents();
+
         // 設定預設日期
         this.setDefaultDates();
 
         // 從 localStorage 載入已儲存的資料
         this.loadSavedData();
 
+        // 初始化 Firebase（如果已設定）
+        this.initFirebase();
+
         console.log('國中調代課自動化系統已初始化');
+    }
+
+    /**
+     * 初始化 Firebase
+     */
+    async initFirebase() {
+        // 更新 Firebase 設定狀態 UI
+        this.updateFirebaseConfigUI();
+
+        // 如果有儲存的設定，嘗試初始化
+        if (hasStoredConfig()) {
+            try {
+                await initializeFirebase();
+
+                // 初始化認證服務
+                await initAuthService();
+
+                // 監聽認證狀態變更
+                onAuthStateChange((user) => {
+                    this.onAuthStateChanged(user);
+                });
+
+                // 監聽同步狀態變更
+                onSyncStatusChange((status) => {
+                    this.updateSyncStatusUI(status);
+                });
+
+                console.log('Firebase 初始化完成');
+            } catch (error) {
+                console.error('Firebase 初始化失敗:', error);
+            }
+        }
+    }
+
+    /**
+     * 綁定 Firebase 認證相關事件
+     */
+    bindFirebaseAuthEvents() {
+        // Google 登入按鈕
+        const googleSigninBtn = document.getElementById('google-signin-btn');
+        googleSigninBtn?.addEventListener('click', () => this.handleGoogleSignIn());
+
+        // 登出按鈕
+        const signoutBtn = document.getElementById('signout-btn');
+        signoutBtn?.addEventListener('click', () => this.handleSignOut());
+
+        // 儲存 Firebase 設定按鈕
+        const saveFirebaseConfigBtn = document.getElementById('save-firebase-config-btn');
+        saveFirebaseConfigBtn?.addEventListener('click', () => this.saveFirebaseConfig());
+
+        // 重新設定 Firebase 按鈕
+        const resetFirebaseConfigBtn = document.getElementById('reset-firebase-config-btn');
+        resetFirebaseConfigBtn?.addEventListener('click', () => this.resetFirebaseConfig());
+
+        // 顯示 Firebase 教學按鈕
+        const showFirebaseGuideBtn = document.getElementById('show-firebase-guide-btn');
+        showFirebaseGuideBtn?.addEventListener('click', () => this.showFirebaseGuide());
+
+        // 關閉 Firebase 教學彈窗
+        const closeFirebaseGuideBtn = document.getElementById('close-firebase-guide-btn');
+        closeFirebaseGuideBtn?.addEventListener('click', () => this.hideFirebaseGuide());
+
+        // 同步衝突對話框相關
+        const conflictOptions = document.querySelectorAll('.conflict-option');
+        conflictOptions.forEach(option => {
+            option.addEventListener('click', () => this.selectConflictOption(option.id));
+        });
+
+        const confirmSyncChoiceBtn = document.getElementById('confirm-sync-choice-btn');
+        confirmSyncChoiceBtn?.addEventListener('click', () => this.confirmSyncChoice());
+
+        const cancelSyncBtn = document.getElementById('cancel-sync-btn');
+        cancelSyncBtn?.addEventListener('click', () => this.hideSyncConflictModal());
+
+        const exportBeforeSyncBtn = document.getElementById('export-before-sync-btn');
+        exportBeforeSyncBtn?.addEventListener('click', () => this.exportLocalData());
+
+        // 點擊 modal 外部關閉
+        const firebaseGuideModal = document.getElementById('firebase-guide-modal');
+        firebaseGuideModal?.addEventListener('click', (e) => {
+            if (e.target === firebaseGuideModal) this.hideFirebaseGuide();
+        });
+
+        const syncConflictModal = document.getElementById('sync-conflict-modal');
+        syncConflictModal?.addEventListener('click', (e) => {
+            if (e.target === syncConflictModal) this.hideSyncConflictModal();
+        });
+    }
+
+    /**
+     * 更新 Firebase 設定 UI
+     */
+    updateFirebaseConfigUI() {
+        const notConfigured = document.getElementById('firebase-not-configured');
+        const configured = document.getElementById('firebase-configured');
+        const configForm = document.getElementById('firebase-config-form');
+
+        if (hasStoredConfig()) {
+            notConfigured?.classList.add('hidden');
+            configured?.classList.remove('hidden');
+            configForm?.classList.add('hidden');
+        } else {
+            notConfigured?.classList.remove('hidden');
+            configured?.classList.add('hidden');
+            configForm?.classList.remove('hidden');
+        }
+    }
+
+    /**
+     * 儲存 Firebase 設定
+     */
+    async saveFirebaseConfig() {
+        const configInput = document.getElementById('firebase-config-input');
+        const errorElement = document.getElementById('firebase-config-error');
+
+        if (!configInput) return;
+
+        const configText = configInput.value.trim();
+
+        if (!configText) {
+            this.showFirebaseConfigError('請輸入 Firebase 設定');
+            return;
+        }
+
+        try {
+            // 嘗試解析 JSON
+            const config = JSON.parse(configText);
+
+            // 驗證必要欄位
+            if (!validateConfig(config)) {
+                this.showFirebaseConfigError('設定缺少必要欄位（apiKey, authDomain, projectId）');
+                return;
+            }
+
+            // 儲存設定
+            saveConfig(config);
+
+            // 初始化 Firebase
+            await initializeFirebase(config);
+            await initAuthService();
+
+            // 監聽認證狀態變更
+            onAuthStateChange((user) => {
+                this.onAuthStateChanged(user);
+            });
+
+            // 監聽同步狀態變更
+            onSyncStatusChange((status) => {
+                this.updateSyncStatusUI(status);
+            });
+
+            // 更新 UI
+            this.updateFirebaseConfigUI();
+            errorElement?.classList.add('hidden');
+
+            alert('Firebase 設定已儲存！現在可以使用 Google 帳號登入。');
+        } catch (e) {
+            if (e instanceof SyntaxError) {
+                this.showFirebaseConfigError('JSON 格式錯誤，請確認格式正確');
+            } else {
+                this.showFirebaseConfigError('設定儲存失敗：' + e.message);
+            }
+        }
+    }
+
+    /**
+     * 顯示 Firebase 設定錯誤
+     */
+    showFirebaseConfigError(message) {
+        const errorElement = document.getElementById('firebase-config-error');
+        if (errorElement) {
+            errorElement.textContent = message;
+            errorElement.classList.remove('hidden');
+        }
+    }
+
+    /**
+     * 重新設定 Firebase
+     */
+    resetFirebaseConfig() {
+        if (!confirm('確定要重新設定 Firebase 嗎？這將會登出目前的帳號。')) {
+            return;
+        }
+
+        // 登出
+        this.handleSignOut();
+
+        // 清除設定
+        clearConfig();
+
+        // 更新 UI
+        this.updateFirebaseConfigUI();
+
+        // 清空輸入框
+        const configInput = document.getElementById('firebase-config-input');
+        if (configInput) configInput.value = '';
+    }
+
+    /**
+     * 顯示 Firebase 教學
+     */
+    showFirebaseGuide() {
+        const modal = document.getElementById('firebase-guide-modal');
+        modal?.classList.remove('hidden');
+    }
+
+    /**
+     * 隱藏 Firebase 教學
+     */
+    hideFirebaseGuide() {
+        const modal = document.getElementById('firebase-guide-modal');
+        modal?.classList.add('hidden');
+    }
+
+    /**
+     * 處理 Google 登入
+     */
+    async handleGoogleSignIn() {
+        if (!isFirebaseInitialized()) {
+            alert('請先完成 Firebase 設定');
+            // 切換到設定頁籤
+            const settingsTab = document.querySelector('.tab-btn[data-tab="settings"]');
+            settingsTab?.click();
+            return;
+        }
+
+        try {
+            const user = await signInWithGoogle();
+            console.log('登入成功:', user);
+        } catch (error) {
+            console.error('登入失敗:', error);
+            alert('登入失敗：' + error.message);
+        }
+    }
+
+    /**
+     * 處理登出
+     */
+    async handleSignOut() {
+        try {
+            // 停用即時同步
+            this.dataManager.disableRealtimeSync();
+
+            await signOutUser();
+            console.log('已登出');
+        } catch (error) {
+            console.error('登出失敗:', error);
+        }
+    }
+
+    /**
+     * 認證狀態變更處理
+     */
+    async onAuthStateChanged(user) {
+        const loggedOut = document.getElementById('auth-logged-out');
+        const loggedIn = document.getElementById('auth-logged-in');
+
+        if (user) {
+            // 已登入
+            loggedOut?.classList.add('hidden');
+            loggedIn?.classList.remove('hidden');
+
+            // 更新使用者資訊
+            const userInfo = getUserInfo();
+            const avatarImg = document.getElementById('user-avatar');
+            const userName = document.getElementById('user-name');
+
+            if (avatarImg && userInfo?.photoURL) {
+                avatarImg.src = userInfo.photoURL;
+            }
+            if (userName && userInfo?.displayName) {
+                userName.textContent = userInfo.displayName;
+            }
+
+            // 檢查同步狀態
+            await this.checkAndHandleSync();
+        } else {
+            // 已登出
+            loggedOut?.classList.remove('hidden');
+            loggedIn?.classList.add('hidden');
+
+            // 停用即時同步
+            this.dataManager.disableRealtimeSync();
+        }
+    }
+
+    /**
+     * 更新同步狀態 UI
+     */
+    updateSyncStatusUI(status) {
+        const syncStatusElement = document.getElementById('sync-status');
+        if (!syncStatusElement) return;
+
+        const formatted = formatSyncStatus(status);
+
+        syncStatusElement.className = 'sync-status ' + status;
+        syncStatusElement.querySelector('.sync-icon').textContent = formatted.icon;
+        syncStatusElement.querySelector('.sync-text').textContent = formatted.text;
+    }
+
+    /**
+     * 檢查並處理同步
+     */
+    async checkAndHandleSync() {
+        if (!isSignedIn()) return;
+
+        try {
+            const syncStatus = await this.dataManager.checkInitialSyncStatus();
+
+            switch (syncStatus.action) {
+                case 'upload':
+                    // 本機資料較新或雲端沒資料，上傳
+                    await this.dataManager.syncToCloud();
+                    break;
+
+                case 'download':
+                    // 雲端資料較新，下載
+                    this.dataManager.loadFromCloud(syncStatus.cloudData);
+                    // 更新 UI
+                    this.refreshUIAfterSync();
+                    // 儲存到 localStorage
+                    this.saveDataToStorage();
+                    break;
+
+                case 'conflict':
+                    // 顯示衝突對話框
+                    this.showSyncConflictModal(syncStatus.localData, syncStatus.cloudData);
+                    break;
+
+                case 'none':
+                    // 不需要同步
+                    break;
+            }
+
+            // 啟用即時同步
+            this.dataManager.enableRealtimeSync();
+
+            // 監聽資料變更，自動同步
+            this.dataManager.onDataChange(async () => {
+                if (isSignedIn()) {
+                    await this.dataManager.syncToCloud();
+                }
+            });
+
+        } catch (error) {
+            console.error('同步檢查失敗:', error);
+        }
+    }
+
+    /**
+     * 顯示同步衝突對話框
+     */
+    showSyncConflictModal(localData, cloudData) {
+        const modal = document.getElementById('sync-conflict-modal');
+
+        // 更新本機資料摘要
+        document.getElementById('local-record-count').textContent =
+            localData?.substituteRecords?.length || 0;
+        document.getElementById('local-last-modified').textContent =
+            localData?.lastModified ? new Date(localData.lastModified).toLocaleString('zh-TW') : '-';
+
+        // 更新雲端資料摘要
+        document.getElementById('cloud-record-count').textContent =
+            cloudData?.substituteRecords?.length || 0;
+        document.getElementById('cloud-last-modified').textContent =
+            cloudData?.lastModified ? new Date(cloudData.lastModified).toLocaleString('zh-TW') : '-';
+
+        // 儲存資料供後續使用
+        this.pendingSyncData = { localData, cloudData };
+
+        // 重置選擇狀態
+        document.querySelectorAll('.conflict-option').forEach(opt => {
+            opt.classList.remove('selected');
+        });
+        document.getElementById('confirm-sync-choice-btn').disabled = true;
+
+        modal?.classList.remove('hidden');
+    }
+
+    /**
+     * 隱藏同步衝突對話框
+     */
+    hideSyncConflictModal() {
+        const modal = document.getElementById('sync-conflict-modal');
+        modal?.classList.add('hidden');
+        this.pendingSyncData = null;
+        this.selectedConflictOption = null;
+    }
+
+    /**
+     * 選擇衝突解決選項
+     */
+    selectConflictOption(optionId) {
+        // 移除其他選項的選取狀態
+        document.querySelectorAll('.conflict-option').forEach(opt => {
+            opt.classList.remove('selected');
+        });
+
+        // 選取當前選項
+        const option = document.getElementById(optionId);
+        option?.classList.add('selected');
+
+        this.selectedConflictOption = optionId;
+
+        // 啟用確認按鈕
+        document.getElementById('confirm-sync-choice-btn').disabled = false;
+    }
+
+    /**
+     * 確認同步選擇
+     */
+    async confirmSyncChoice() {
+        if (!this.selectedConflictOption || !this.pendingSyncData) return;
+
+        const { localData, cloudData } = this.pendingSyncData;
+
+        switch (this.selectedConflictOption) {
+            case 'conflict-local':
+                // 使用本機資料，上傳到雲端
+                await this.dataManager.syncToCloud();
+                break;
+
+            case 'conflict-cloud':
+                // 使用雲端資料
+                this.dataManager.loadFromCloud(cloudData);
+                this.refreshUIAfterSync();
+                this.saveDataToStorage();
+                break;
+
+            case 'conflict-merge':
+                // 智慧合併
+                const mergedData = this.dataManager.mergeWithCloudData(cloudData);
+                await this.dataManager.syncToCloud();
+                this.refreshUIAfterSync();
+                this.saveDataToStorage();
+                break;
+        }
+
+        // 啟用即時同步
+        this.dataManager.enableRealtimeSync();
+
+        // 關閉對話框
+        this.hideSyncConflictModal();
+    }
+
+    /**
+     * 同步後刷新 UI
+     */
+    refreshUIAfterSync() {
+        // 更新教師表格
+        this.updateTeacherTable();
+
+        // 更新教師下拉選單
+        this.populateTeacherDropdowns();
+
+        // 更新調課紀錄
+        this.searchRecords();
+
+        // 更新學校名稱顯示
+        const schoolName = this.dataManager.getSchoolName();
+        if (schoolName) {
+            const schoolNameInput = document.getElementById('school-name');
+            if (schoolNameInput) schoolNameInput.value = schoolName;
+            this.showSchoolNameConfirmed();
+            this.pdfGenerator.setSchoolName(schoolName);
+        }
+
+        // 更新頁籤狀態
+        this.updateTabLockStatus();
+        this.updateTabContentVisibility();
+
+        // 更新課表狀態
+        const scheduleData = this.dataManager.getScheduleData();
+        if (scheduleData.length > 0) {
+            const statusBox = document.getElementById('schedule-status');
+            statusBox?.classList.remove('hidden');
+
+            const parseResult = {
+                teachers: this.dataManager.getTeachers(),
+                classes: this.dataManager.getClasses(),
+                scheduleData: scheduleData
+            };
+            this.updateScheduleStatus(parseResult);
+        }
     }
 
     /**
@@ -2360,10 +2873,21 @@ class SubstituteTeacherApp {
 
     /**
      * 儲存資料到 localStorage
+     * @param {boolean} syncToCloud - 是否同步到雲端，預設為 true
      */
-    saveDataToStorage() {
+    saveDataToStorage(syncToCloud = true) {
+        // 更新最後修改時間
+        this.dataManager.updateLastModified();
+
         const data = this.dataManager.exportToStorage();
         localStorage.setItem('substituteSystemData', JSON.stringify(data));
+
+        // 如果已登入且需要同步，則同步到雲端
+        if (syncToCloud && isSignedIn()) {
+            this.dataManager.syncToCloud().catch(error => {
+                console.error('雲端同步失敗:', error);
+            });
+        }
     }
 
     /**
@@ -2375,7 +2899,9 @@ class SubstituteTeacherApp {
         const statusDiv = document.getElementById('save-status');
         statusDiv.classList.remove('hidden', 'error');
         statusDiv.classList.add('success');
-        statusDiv.textContent = '✓ 資料已儲存至瀏覽器（' + new Date().toLocaleTimeString() + '）';
+
+        const syncText = isSignedIn() ? '（已同步到雲端）' : '';
+        statusDiv.textContent = '✓ 資料已儲存' + syncText + '（' + new Date().toLocaleTimeString() + '）';
 
         // 3 秒後隱藏提示
         setTimeout(() => {

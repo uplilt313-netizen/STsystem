@@ -6,7 +6,18 @@
  * - 教師資料
  * - 班級資料
  * - 調代課紀錄
+ * - 雲端同步
  */
+
+import {
+    uploadToCloud,
+    downloadFromCloud,
+    enableRealtimeSync,
+    disableRealtimeSync,
+    checkInitialSync,
+    mergeData
+} from './cloudSyncService.js';
+import { isSignedIn } from './authService.js';
 
 export class DataManager {
     constructor() {
@@ -24,6 +35,18 @@ export class DataManager {
 
         // 調代課紀錄
         this.substituteRecords = [];
+
+        // 最後修改時間
+        this.lastModified = null;
+
+        // 資料版本（用於同步衝突檢測）
+        this.version = 0;
+
+        // 即時同步取消函數
+        this.unsubscribeRealtimeSync = null;
+
+        // 資料變更回調
+        this.onDataChangeCallbacks = [];
     }
 
     /**
@@ -274,5 +297,180 @@ export class DataManager {
         this.teachers = [];
         this.classes = [];
         this.substituteRecords = [];
+        this.lastModified = null;
+        this.version = 0;
+    }
+
+    /**
+     * 更新最後修改時間
+     */
+    updateLastModified() {
+        this.lastModified = new Date().toISOString();
+    }
+
+    /**
+     * 匯出資料供雲端同步
+     * @returns {Object} 可同步的資料物件
+     */
+    exportForSync() {
+        return {
+            schoolName: this.schoolName,
+            scheduleData: this.scheduleData,
+            teachers: this.teachers,
+            classes: this.classes,
+            substituteRecords: this.substituteRecords,
+            lastModified: this.lastModified || new Date().toISOString(),
+            version: this.version
+        };
+    }
+
+    /**
+     * 從雲端資料載入
+     * @param {Object} data - 雲端資料物件
+     */
+    loadFromCloud(data) {
+        if (!data) return;
+
+        if (data.schoolName !== undefined) this.schoolName = data.schoolName;
+        if (data.scheduleData) this.scheduleData = data.scheduleData;
+        if (data.teachers) this.teachers = data.teachers;
+        if (data.classes) this.classes = data.classes;
+        if (data.substituteRecords) this.substituteRecords = data.substituteRecords;
+        if (data.lastModified) this.lastModified = data.lastModified;
+        if (data.version !== undefined) this.version = data.version;
+
+        // 通知所有監聽者
+        this.notifyDataChange();
+    }
+
+    /**
+     * 同步到雲端
+     * @returns {Promise<boolean>}
+     */
+    async syncToCloud() {
+        if (!isSignedIn()) {
+            console.log('未登入，無法同步到雲端');
+            return false;
+        }
+
+        this.updateLastModified();
+        this.version++;
+
+        const data = this.exportForSync();
+        const success = await uploadToCloud(data);
+
+        return success;
+    }
+
+    /**
+     * 從雲端載入資料
+     * @returns {Promise<Object|null>}
+     */
+    async loadFromCloudStorage() {
+        if (!isSignedIn()) {
+            console.log('未登入，無法從雲端載入');
+            return null;
+        }
+
+        const data = await downloadFromCloud();
+        return data;
+    }
+
+    /**
+     * 啟用即時同步
+     * @returns {Function} 取消監聽函數
+     */
+    enableRealtimeSync() {
+        if (!isSignedIn()) {
+            console.log('未登入，無法啟用即時同步');
+            return () => {};
+        }
+
+        // 停用之前的同步
+        this.disableRealtimeSync();
+
+        // 啟用新的即時同步
+        this.unsubscribeRealtimeSync = enableRealtimeSync((data) => {
+            console.log('收到雲端資料更新');
+            this.loadFromCloud(data);
+        });
+
+        return this.unsubscribeRealtimeSync;
+    }
+
+    /**
+     * 停用即時同步
+     */
+    disableRealtimeSync() {
+        if (this.unsubscribeRealtimeSync) {
+            this.unsubscribeRealtimeSync();
+            this.unsubscribeRealtimeSync = null;
+        }
+        disableRealtimeSync();
+    }
+
+    /**
+     * 檢查初始同步狀態
+     * @returns {Promise<Object>} { action, localData, cloudData }
+     */
+    async checkInitialSyncStatus() {
+        const localData = this.exportForSync();
+        return await checkInitialSync(localData);
+    }
+
+    /**
+     * 執行資料合併
+     * @param {Object} cloudData - 雲端資料
+     * @returns {Object} 合併後的資料
+     */
+    mergeWithCloudData(cloudData) {
+        const localData = this.exportForSync();
+        const mergedData = mergeData(localData, cloudData);
+
+        // 載入合併後的資料
+        this.loadFromCloud(mergedData);
+
+        return mergedData;
+    }
+
+    /**
+     * 註冊資料變更回調
+     * @param {Function} callback - 回調函數
+     * @returns {Function} 取消註冊函數
+     */
+    onDataChange(callback) {
+        this.onDataChangeCallbacks.push(callback);
+        return () => {
+            const index = this.onDataChangeCallbacks.indexOf(callback);
+            if (index > -1) {
+                this.onDataChangeCallbacks.splice(index, 1);
+            }
+        };
+    }
+
+    /**
+     * 通知資料變更
+     */
+    notifyDataChange() {
+        this.onDataChangeCallbacks.forEach(callback => {
+            try {
+                callback(this.exportForSync());
+            } catch (error) {
+                console.error('資料變更回調執行錯誤:', error);
+            }
+        });
+    }
+
+    /**
+     * 取得資料摘要（用於同步衝突顯示）
+     * @returns {Object}
+     */
+    getDataSummary() {
+        return {
+            recordCount: this.substituteRecords.length,
+            teacherCount: this.teachers.length,
+            classCount: this.classes.length,
+            lastModified: this.lastModified
+        };
     }
 }
