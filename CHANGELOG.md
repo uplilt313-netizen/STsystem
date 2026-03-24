@@ -1,5 +1,19 @@
 # 版本紀錄 (Changelog)
 
+## [1.4.0] - 2026-03-24
+
+### 重大變更
+- **移除 Google Sheets 雲端同步**：改用 Firebase 實現更穩定的雲端同步
+- **新增 Firebase 雲端同步**：
+  - Google 帳號一鍵登入（Firebase Authentication）
+  - Firebase Realtime Database 即時資料同步
+  - 支援多設備共享調代課紀錄
+  - 離線時自動切換本地儲存模式
+- **內建 Firebase 設定**：使用者無需自行設定，開箱即用
+- **新增網站底部製作者資訊**
+
+---
+
 ## [1.3.3] - 2026-03-23
 
 ### 功能優化

@@ -21,16 +21,19 @@
 - 計算實際授課時數與超鐘點時數
 - 支援匯出 Excel 報表
 
-### 4. Google Sheets 雲端同步（選用）
-- 透過 Google Apps Script 實現資料同步
+### 4. Firebase 雲端同步
+- Google 帳號一鍵登入
+- Firebase Realtime Database 即時同步
 - 支援多設備共享調課紀錄
+- 離線時自動切換本地儲存
 
 ## 技術架構
 
 - **前端**：純 HTML + CSS + JavaScript (ES6 Modules)
-- **資料儲存**：localStorage + Google Sheets (選用)
+- **資料儲存**：localStorage + Firebase Realtime Database
+- **身份驗證**：Firebase Authentication（Google 登入）
 - **部署**：可直接部署至 GitHub Pages
-- **無需後端伺服器**
+- **無需自建後端伺服器**
 
 ## 使用的 CDN 套件
 
@@ -81,16 +84,15 @@
 | 領域 | 學習領域 | 數學領域、語文領域... |
 | 科目 | 科目名稱 | 數學、國語文... |
 
-## Google Sheets 設定（選用）
+## 雲端同步功能
 
-如需啟用雲端同步功能：
+系統內建 Firebase 雲端同步，使用者只需：
 
-1. 建立新的 Google Sheets 試算表
-2. 開啟「擴充功能 > Apps Script」
-3. 將 `google-apps-script/Code.gs` 的內容貼入
-4. 修改 `SPREADSHEET_ID` 為你的試算表 ID
-5. 部署為 Web App（存取權限設為「所有人」）
-6. 複製 Web App URL 到系統設定中
+1. 點擊「登入」按鈕
+2. 使用 Google 帳號授權登入
+3. 資料將自動同步至雲端
+
+登入後可在多台設備間同步調代課紀錄，登出後自動切換為本地儲存模式。
 
 ## 專案結構
 
@@ -104,14 +106,13 @@ STsystem/
 │   └── js/
 │       ├── app.js          # 主應用程式
 │       └── modules/
-│           ├── dataManager.js          # 資料管理
+│           ├── dataManager.js          # 資料管理（含 Firebase 同步）
 │           ├── scheduleParser.js       # 課表解析
 │           ├── recommendationEngine.js # 智慧推薦
 │           ├── pdfGenerator.js         # PDF 生成
-│           ├── googleSheetsAPI.js      # GAS API
 │           └── settlementCalculator.js # 月結算
-└── google-apps-script/
-    └── Code.gs             # Google Apps Script 後端
+└── test/
+    └── ...                 # 測試檔案
 ```
 
 ## 智慧推薦演算法
