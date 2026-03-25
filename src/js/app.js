@@ -1852,12 +1852,15 @@ class SubstituteTeacherApp {
         }
 
         // 檢查該課堂是否已有調代課紀錄（衝堂檢查）
-        const existingRecord = this.dataManager.checkExistingRecord(
-            date,
-            this.selectedCourse.period,
-            this.selectedCourse.className,
-            this.selectedCourse.originalTeacher
-        );
+        let existingRecord = null;
+        if (typeof this.dataManager?.checkExistingRecord === 'function') {
+            existingRecord = this.dataManager.checkExistingRecord(
+                date,
+                this.selectedCourse.period,
+                this.selectedCourse.className,
+                this.selectedCourse.originalTeacher
+            );
+        }
 
         if (existingRecord) {
             const recordType = existingRecord.type || '代課';
