@@ -265,12 +265,12 @@ export class PDFGenerator {
                 <tr>
                     <td style="padding: 8px; border: 1px solid #333; background: ${normalBg}; width: 18%; font-weight: bold;">異動類型</td>
                     <td style="padding: 8px; border: 1px solid #333; width: 32%;">${changeType}</td>
-                    <td style="padding: 8px; border: 1px solid #333; background: ${normalBg}; width: 18%; font-weight: bold;">日期</td>
-                    <td style="padding: 8px; border: 1px solid #333; width: 32%;">${formattedDate}</td>
+                    <td style="padding: 8px; border: 1px solid #333; background: ${originalTeacherBg}; width: 18%; font-weight: bold;">原任課教師</td>
+                    <td style="padding: 8px; border: 1px solid #333; ${isOriginalTeacherSheet ? 'background: ' + highlightBg + ';' : ''} width: 32%;">${record.originalTeacher}</td>
                 </tr>
                 <tr>
-                    <td style="padding: 8px; border: 1px solid #333; background: ${originalTeacherBg}; font-weight: bold;">原任課教師</td>
-                    <td style="padding: 8px; border: 1px solid #333; ${isOriginalTeacherSheet ? 'background: ' + highlightBg + ';' : ''}">${record.originalTeacher}</td>
+                    <td style="padding: 8px; border: 1px solid #333; background: ${normalBg}; font-weight: bold;">日期</td>
+                    <td style="padding: 8px; border: 1px solid #333;">${formattedDate}</td>
                     <td style="padding: 8px; border: 1px solid #333; background: ${substituteTeacherBg}; font-weight: bold;">代課教師</td>
                     <td style="padding: 8px; border: 1px solid #333; ${isSubstituteTeacherSheet ? 'background: ' + highlightBg + ';' : ''}">${record.substituteTeacher}</td>
                 </tr>
